@@ -387,7 +387,7 @@ function createContentCell(content) {
   const td = document.createElement('td');
   td.className = 'content-cell';
   const div = document.createElement('div');
-  div.className = 'content-text';
+  div.className = 'content-text expanded';
   div.textContent = content ?? MISSING_FIELD;
   div.addEventListener('click', () => div.classList.toggle('expanded'));
   td.appendChild(div);

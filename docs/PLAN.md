@@ -911,7 +911,7 @@ Stop clicked:
 | Group | Yes | Group name from session manifest |
 | Poster Name | Yes + text search | `—` when `null` |
 | Poster ID | Yes | `—` when `null` |
-| Message Content | No | Truncated at ~120 chars; click to expand full text in-cell |
+| Message Content | No | Full text shown by default; click to collapse/expand in-cell |
 | Images | No | Count badge (e.g. "2 images"); click to show blob URLs list |
 | Links | No | Each `href` rendered as clickable anchor; stacked vertically |
 | Screenshot | No | Thumbnail max 80px height; click → lightbox overlay |
