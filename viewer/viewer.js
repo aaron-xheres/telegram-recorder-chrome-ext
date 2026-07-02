@@ -24,6 +24,7 @@ const els = {
 
 // State.
 let directoryHandle = null;
+let currentGroupId = '';
 /** @type {Map<string, object>} */
 let sessions = new Map();
 /** @type {object[]} */
@@ -67,6 +68,7 @@ async function loadDirectory(root) {
   selectedSessionIds = new Set();
 
   // Viewer expects a single group folder, not the telegram-recorder/ root.
+  currentGroupId = root.name;
   await loadGroupDirectory(root, root.name);
 
   selectedSessionIds = new Set(sessions.keys());
@@ -561,7 +563,7 @@ function buildCsvRows(visibleMessages) {
   return rows;
 }
 
-function exportCsv() {
+async function exportCsv() {
   const visible = getVisibleMessages();
   if (visible.length === 0) {
     alert('No visible rows to export.');
@@ -570,17 +572,27 @@ function exportCsv() {
 
   const csvString = buildCsvRows(visible).join('\n') + '\n';
   const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
 
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'telegram-recorder-export.csv';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const groupId = currentGroupId || messages[0]?.groupId || 'unknown';
+  const suggestedName = `telegram-recorder-${groupId}.csv`;
 
-  // Give the browser a moment to start the download before revoking.
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName,
+      types: [{
+        description: 'CSV files',
+        accept: { 'text/csv': ['.csv'] }
+      }]
+    });
+
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    console.error('[TelegramRecorder] save CSV failed', err);
+    alert('Failed to save CSV: ' + (err.message ?? String(err)));
+  }
 }
 
 // ---------------------------------------------------------------------------
