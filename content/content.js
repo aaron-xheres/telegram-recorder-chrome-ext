@@ -21,7 +21,13 @@ let isProcessing = false;
 let navPollInterval = null;
 let lastLocationHref = location.href;
 
-const GROUP_NAME_SELECTOR = '.chat-info .peer-title';
+const GROUP_NAME_SELECTORS = [
+  '.chat-info .peer-title',
+  '.chat-info-title',
+  '.chat-info .chat-info-title',
+  '.topbar .peer-title',
+  'title'
+];
 const BUBBLES_SELECTOR = '.bubbles';
 const BUBBLE_SELECTOR = '.bubble';
 
@@ -52,8 +58,12 @@ function getGroupId() {
  * @returns {string|null}
  */
 function getGroupName() {
-  const title = document.querySelector(GROUP_NAME_SELECTOR);
-  return title?.textContent?.trim() ?? null;
+  for (const selector of GROUP_NAME_SELECTORS) {
+    const title = document.querySelector(selector);
+    const text = title?.textContent?.trim();
+    if (text) return text;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

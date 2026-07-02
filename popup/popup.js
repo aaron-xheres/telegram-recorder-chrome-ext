@@ -145,24 +145,28 @@ function render() {
     setVisible(els.sessionRow, true);
     els.sessionId.textContent = state.currentSessionId;
     setVisible(els.stopButton, true);
+    setVisible(els.startButton, false);
   } else {
     setVisible(els.sessionRow, false);
+    setVisible(els.stopButton, false);
+    setVisible(els.startButton, true);
     const hasGroup = Boolean(state.currentGroupId);
-    setVisible(els.startButton, hasGroup);
-    if (hasGroup) {
-      els.startButton.disabled = false;
-    }
+    els.startButton.disabled = !hasGroup;
+    els.startButton.title = hasGroup ? '' : 'Open a Telegram group chat first';
   }
 
   // Update group info asynchronously.
   groupInfo.then(info => {
-    els.groupName.textContent = info.groupName ?? 'No group open';
+    const hasGroup = Boolean(info.groupId);
+    els.groupName.textContent = hasGroup
+      ? (info.groupName ?? 'Unknown')
+      : 'No group open';
     els.groupId.textContent = info.groupId ?? '—';
 
-    const hasGroup = Boolean(info.groupId);
     if (!isRecording) {
-      setVisible(els.startButton, hasGroup);
+      setVisible(els.startButton, true);
       els.startButton.disabled = !hasGroup;
+      els.startButton.title = hasGroup ? '' : 'Open a Telegram group chat first';
     }
   });
 }
