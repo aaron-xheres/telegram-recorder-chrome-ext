@@ -65,10 +65,18 @@ async function loadDirectory(root) {
   screenshotBlobUrls = new Map();
   selectedSessionIds = new Set();
 
+  let hasSubdirectories = false;
   for await (const [name, entry] of root.entries()) {
     if (entry.kind !== 'dir') continue;
+    hasSubdirectories = true;
     const groupId = name;
     await loadGroupDirectory(entry, groupId);
+  }
+
+  // Fallback: if the user opened a single group folder (e.g. -5491281397)
+  // instead of the telegram-recorder/ root, treat that folder as one group.
+  if (!hasSubdirectories) {
+    await loadGroupDirectory(root, root.name);
   }
 
   selectedSessionIds = new Set(sessions.keys());
