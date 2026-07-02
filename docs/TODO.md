@@ -212,22 +212,23 @@
 
 > Ref: [`PLAN.md §7` — Screenshot Pipeline](PLAN.md#7-screenshot-pipeline)
 
-- [ ] **4.1** Implement `screenshot.js` → `captureScreenshot(bubble)` async function:
+- [x] **4.1** Implement `screenshot.js` → `captureScreenshot(bubble)` async function:
   1. `bubble.scrollIntoView({ block: 'center', behavior: 'instant' })`
   2. `await sleep(N)` where N = wait time confirmed in task **1.5** (default 150ms)
   3. `rect = bubble.getBoundingClientRect()`
   4. `dpr = window.devicePixelRatio`
   5. Send `CAPTURE_TAB` to background; await `fullDataUrl` response
 
-- [ ] **4.2** Implement canvas crop in `screenshot.js`:
+- [x] **4.2** Implement canvas crop in `screenshot.js`:
   1. Create `<canvas>` sized `rect.width × dpr` by `rect.height × dpr`
   2. Draw `fullImg` onto canvas with offset `-(rect.left × dpr)`, `-(rect.top × dpr)`
   3. Return `canvas.toDataURL('image/png')` (cropped data URL)
 
-- [ ] **4.3** Implement `CAPTURE_TAB` handler in `background/service-worker.js`:
+- [x] **4.3** Implement `CAPTURE_TAB` handler in `background/service-worker.js`:
   Call `chrome.tabs.captureVisibleTab(tabId, { format: 'png' })`.
   Return the resulting `dataUrl` to the requesting content script via callback or
   `sendResponse`.
+  <!-- Refactored onMessage listener to support async handlers by returning `true`. -->
 
 ---
 
