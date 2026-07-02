@@ -266,11 +266,9 @@
 
     switch (message.type) {
       case CONTENT_MSG.GET_GROUP_INFO: {
-        sendResponse({
-          ok: true,
-          groupId: getGroupId(),
-          groupName: getGroupName()
-        });
+        const info = { ok: true, groupId: getGroupId(), groupName: getGroupName() };
+        console.log('[TelegramRecorder] GET_GROUP_INFO', info);
+        sendResponse(info);
         break;
       }
 
@@ -288,6 +286,11 @@
       case CONTENT_MSG.STOP_RECORDING: {
         stopRecording();
         sendResponse({ ok: true });
+        break;
+      }
+
+      case CONTENT_MSG.PING: {
+        sendResponse({ ok: true, type: CONTENT_MSG.PONG });
         break;
       }
 
