@@ -75,11 +75,12 @@ async function sendToContent(message) {
   // Reinjection fallback (Phase 10.3).
   await chrome.scripting.executeScript({
     target: { tabId: activeTabId },
-    files: ['shared/messages.js', 'content/extractor.js', 'content/screenshot.js', 'content/content.js']
+    files: ['shared/messages.js', 'content/extractor.js', 'content/screenshot.js', 'content/content.js'],
+    injectImmediately: true
   });
 
   // Give the scripts a moment to register listeners.
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise(resolve => setTimeout(resolve, 250));
   const response = await chrome.tabs.sendMessage(activeTabId, message);
   console.log('[TelegramRecorder] post-reinjection response', response);
   return response;

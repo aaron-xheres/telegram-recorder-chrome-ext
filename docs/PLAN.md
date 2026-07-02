@@ -415,6 +415,13 @@ function handleMutations(mutations) {
 4. Else → add to processing queue
 ```
 
+### Safety Scan Fallback
+
+Because Telegram's SPA router may recreate the `.bubbles` container while a session is active,
+a periodic scan (e.g. every 3 seconds) walks `document.querySelectorAll('.bubble[data-mid]')` and
+enqueues any bubble whose `data-mid` is neither in `baselineSet` nor `recordedSet`. This catches
+messages that were inserted during brief observer detachments without adding noticeable overhead.
+
 ---
 
 ## 6. Content Extraction Rules
@@ -430,7 +437,9 @@ unicode char and `data-sticker-emoji` attribute are NOT preserved.
 clone = translatable.cloneNode(true)
 clone.querySelectorAll('img.emoji, img.emoji-image, custom-emoji-element, custom-emoji-renderer-element')
   .forEach(el => el.remove())
-content = clone.textContent.trim()
+// Telegram interleaves a lot of wrapper whitespace around stickers/emoji; collapse runs
+// so the extracted text remains readable.
+content = clone.textContent.replace(/\s+/g, ' ').trim()
 // Browser decodes HTML entities (&amp; → &) automatically via textContent
 ```
 

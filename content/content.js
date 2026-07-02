@@ -34,8 +34,8 @@
 
   /** @type {MutationObserver|null} */
   var bubblesObserver = null;
-  /** @type {MutationObserver[]} */
-  var groupObservers = [];
+  /** @type {number|null} */
+  var scanInterval = null;
   /** @type {QueueItem[]} */
   var queue = [];
 
@@ -52,9 +52,9 @@
   const BUBBLES_CONTAINER_SELECTORS = [
     '.bubbles',
     '.bubbles-inner',
-    '[class*="bubbles"]',
     '.chat-background',
-    '.scrollable.scrollable-y'
+    '.scrollable.scrollable-y',
+    '[class*="bubbles"]'
   ];
 
   // ---------------------------------------------------------------------------
@@ -86,7 +86,10 @@
   function getGroupId() {
     // Telegram Web K puts the current chat identifier in the URL.
     // Prefer it because the DOM may lag behind navigation.
-    const hash = location.hash?.replace(/^#/, '');
+    const rawHash = location.hash?.replace(/^#/, '') ?? '';
+    // Hashes may contain query params (e.g. #@username?folder=...).
+    const hash = rawHash.split('?')[0];
+
     if (hash) {
       if (/^-?\d+$/.test(hash)) {
         return hash;
@@ -94,6 +97,11 @@
       const usernameMatch = hash.match(/^@([a-zA-Z0-9_]+)/);
       if (usernameMatch) {
         return '@' + usernameMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
+      }
+      // Telegram sometimes uses #?tgaddr=tg://resolve?domain=username
+      const tgaddrMatch = rawHash.match(/tgaddr=tg:\/\/resolve\?domain=([a-zA-Z0-9_]+)/);
+      if (tgaddrMatch) {
+        return '@' + tgaddrMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
       }
     }
 
@@ -120,7 +128,12 @@
     for (const selector of BUBBLES_CONTAINER_SELECTORS) {
       const el = document.querySelector(selector);
       if (el) {
-        console.log('[TelegramRecorder] found bubbles container via', selector);
+        // Ensure we don't accidentally grab a small inner element.
+        if (selector === '[class*="bubbles"]' && !el.querySelector('.bubble') && !el.classList.contains('bubbles')) {
+          console.log('[TelegramRecorder] skipping generic bubbles match', selector, el.className);
+          continue;
+        }
+        console.log('[TelegramRecorder] found bubbles container via', selector, el.className);
         return el;
       }
     }
@@ -191,26 +204,40 @@
   // ---------------------------------------------------------------------------
 
   /**
+   * Process all bubble elements inside (or equal to) an added node.
+   * @param {Node} node
+   */
+  function processAddedNode(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE) return 0;
+    const el = /** @type {Element} */ (node);
+    let count = 0;
+
+    if (el.classList.contains('bubble')) {
+      processBubbleNode(el);
+      count++;
+    }
+
+    if (el.querySelectorAll) {
+      const bubbles = el.querySelectorAll('.bubble');
+      bubbles.forEach(processBubbleNode);
+      count += bubbles.length;
+    }
+
+    return count;
+  }
+
+  /**
+   * Catch new messages anywhere inside the bubbles container.
+   * Public groups sometimes insert .bubble nodes directly or wrap them differently,
+   * so we observe the full subtree rather than only direct children.
    * @param {MutationRecord[]} mutations
    */
-  function handleMutations(mutations) {
+  function handleBubblesMutations(mutations) {
     try {
       let detected = 0;
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
-          if (node.nodeType !== Node.ELEMENT_NODE) continue;
-
-          if (node.classList.contains('bubble')) {
-            processBubbleNode(node);
-            detected++;
-            continue;
-          }
-
-          if (node.querySelectorAll) {
-            const bubbles = node.querySelectorAll('.bubble');
-            bubbles.forEach(processBubbleNode);
-            detected += bubbles.length;
-          }
+          detected += processAddedNode(node);
         }
       }
       if (detected > 0) {
@@ -222,43 +249,22 @@
   }
 
   /**
-   * Observe a single bubbles-group for new child bubbles.
-   * @param {Element} group
+   * Periodic safety scan: process any .bubble[data-mid] that is not yet recorded.
+   * This catches messages that were inserted while the observer was not attached
+   * (e.g. the .bubbles container was recreated by Telegram's router).
    */
-  function observeGroup(group) {
-    if (!group || group.__telegramRecorderObserved) return;
-    group.__telegramRecorderObserved = true;
-    const obs = new MutationObserver(handleMutations);
-    obs.observe(group, { childList: true });
-    groupObservers.push(obs);
-  }
-
-  /**
-   * Handle new bubbles-groups added to the main container.
-   * @param {MutationRecord[]} mutations
-   */
-  function handleBubblesContainerMutations(mutations) {
-    try {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType !== Node.ELEMENT_NODE) continue;
-
-          if (node.classList.contains('bubbles-group')) {
-            observeGroup(node);
-            node.querySelectorAll('.bubble').forEach(processBubbleNode);
-            continue;
-          }
-
-          if (node.querySelectorAll) {
-            node.querySelectorAll('.bubbles-group').forEach(group => {
-              observeGroup(group);
-              group.querySelectorAll('.bubble').forEach(processBubbleNode);
-            });
-          }
-        }
+  function scanForMissedBubbles() {
+    if (!isRecording) return;
+    let detected = 0;
+    document.querySelectorAll('.bubble[data-mid]').forEach(bubble => {
+      const mid = bubble.dataset.mid;
+      if (mid && !baselineSet.has(mid) && !recordedSet.has(mid)) {
+        processBubbleNode(bubble);
+        detected++;
       }
-    } catch (err) {
-      console.error('[TelegramRecorder] container mutation handler error', err);
+    });
+    if (detected > 0) {
+      console.log('[TelegramRecorder] scan caught', detected, 'missed bubble(s)');
     }
   }
 
@@ -310,15 +316,21 @@
     baselineSet = buildBaselineSet();
     recordedSet = new Set();
 
-    // Observe existing groups.
-    bubbles.querySelectorAll('.bubbles-group').forEach(observeGroup);
+    // Observe the entire bubbles subtree so we catch messages regardless of whether
+    // Telegram wraps them in .bubbles-group, inserts them directly, or uses other wrappers.
+    bubblesObserver = new MutationObserver(handleBubblesMutations);
+    bubblesObserver.observe(bubbles, { childList: true, subtree: true });
 
-    // Observe the container for new groups (no subtree — avoids interfering with Telegram internals).
-    bubblesObserver = new MutationObserver(handleBubblesContainerMutations);
-    bubblesObserver.observe(bubbles, { childList: true });
+    // Safety net: re-scan the DOM every few seconds for any bubble we missed.
+    scanInterval = window.setInterval(scanForMissedBubbles, 3000);
 
     startNavPolling();
-    console.log('[TelegramRecorder] started recording', { sessionId, groupId: currentGroupId });
+    console.log('[TelegramRecorder] started recording', {
+      sessionId,
+      groupId: currentGroupId,
+      baseline: baselineSet.size,
+      container: bubbles.className
+    });
   }
 
   function stopRecording() {
@@ -330,11 +342,10 @@
       bubblesObserver.disconnect();
       bubblesObserver = null;
     }
-    groupObservers.forEach(obs => obs.disconnect());
-    groupObservers = [];
-    document.querySelectorAll('.bubbles-group').forEach(g => {
-      g.__telegramRecorderObserved = false;
-    });
+    if (scanInterval !== null) {
+      window.clearInterval(scanInterval);
+      scanInterval = null;
+    }
 
     baselineSet.clear();
     recordedSet.clear();
