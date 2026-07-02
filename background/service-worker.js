@@ -43,6 +43,105 @@ function jsonDataUrl(obj) {
 }
 
 /**
+ * Persist the in-memory state to chrome.storage.local.
+ */
+async function persistState() {
+  await chrome.storage.local.set({
+    recording: state.recording,
+    currentSessionId: state.currentSessionId,
+    currentGroupId: state.currentGroupId,
+    currentGroupName: state.currentGroupName
+  });
+}
+
+/**
+ * Clear recording state in memory and storage, but preserve other settings.
+ */
+async function clearRecordingState() {
+  state.recording = false;
+  state.currentSessionId = null;
+  state.currentGroupId = null;
+  state.currentGroupName = null;
+  recordedSet = [];
+  await persistState();
+  await chrome.storage.session.set({ recordedSet: [] });
+}
+
+/**
+ * Find the active Telegram Web K tab to notify during start/stop.
+ * @returns {Promise<number|null>}
+ */
+async function findActiveTelegramKTab() {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs.find(t => t.url && t.url.startsWith('https://web.telegram.org/k/'));
+    return tab?.id ?? null;
+  } catch (err) {
+    console.error('[TelegramRecorder] findActiveTelegramKTab failed', err);
+    return null;
+  }
+}
+
+/**
+ * Download the session manifest file.
+ * @param {string} sessionId
+ * @param {string} groupId
+ * @param {string} groupName
+ */
+async function saveManifest(sessionId, groupId, groupName) {
+  const manifest = {
+    id: sessionId,
+    timestamp: new Date(Number(sessionId)).toISOString(),
+    groupId,
+    groupName
+  };
+  await chrome.downloads.download({
+    url: jsonDataUrl(manifest),
+    filename: `telegram-recorder/${groupId}/manifest-${sessionId}.json`,
+    saveAs: false
+  });
+}
+
+/**
+ * Download a message's JSON record and optional screenshot PNG.
+ * @param {Object} messageData
+ * @param {string|null} croppedDataUrl
+ */
+async function saveFiles(messageData, croppedDataUrl) {
+  const groupId = messageData.groupId;
+  const messageId = messageData.messageId;
+  if (!groupId || !messageId) {
+    throw new Error('Missing groupId or messageId in messageData');
+  }
+
+  const downloads = [];
+
+  if (croppedDataUrl) {
+    downloads.push(
+      chrome.downloads.download({
+        url: croppedDataUrl,
+        filename: `telegram-recorder/${groupId}/${messageId}.png`,
+        saveAs: false
+      }).catch(err => {
+        console.error(`[TelegramRecorder] PNG download failed for ${messageId}`, err);
+      })
+    );
+  }
+
+  downloads.push(
+    chrome.downloads.download({
+      url: jsonDataUrl(messageData),
+      filename: `telegram-recorder/${groupId}/${messageId}.json`,
+      saveAs: false
+    }).catch(err => {
+      console.error(`[TelegramRecorder] JSON download failed for ${messageId}`, err);
+    })
+  );
+
+  await Promise.all(downloads);
+}
+
+/**
  * Rehydrate in-memory state from persistent/session storage.
  * Called on startup and after any service worker wake event.
  */
@@ -96,15 +195,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: false, error: 'Not implemented yet' });
       break;
 
-    case MSG.START_RECORDING:
-      // Implemented in Phase 5.
-      sendResponse({ ok: false, error: 'Not implemented yet' });
-      break;
+    case MSG.START_RECORDING: {
+      const { groupId, groupName } = message;
+      if (!groupId) {
+        sendResponse({ ok: false, error: 'Missing groupId' });
+        break;
+      }
+      handleAsync(
+        (async () => {
+          const sessionId = Date.now().toString();
+          state.recording = true;
+          state.currentSessionId = sessionId;
+          state.currentGroupId = groupId;
+          state.currentGroupName = groupName ?? null;
+          recordedSet = [];
+          await persistState();
+          await chrome.storage.session.set({ recordedSet: [] });
+          await saveManifest(sessionId, groupId, groupName ?? '');
 
-    case MSG.STOP_RECORDING:
-      // Implemented in Phase 5.
-      sendResponse({ ok: false, error: 'Not implemented yet' });
-      break;
+          const tabId = await findActiveTelegramKTab();
+          if (tabId) {
+            await chrome.tabs.sendMessage(tabId, { type: MSG.START_RECORDING, sessionId });
+          }
+          return { ok: true, sessionId };
+        })()
+      );
+      return true;
+    }
+
+    case MSG.STOP_RECORDING: {
+      handleAsync(
+        (async () => {
+          const previousTabId = state.currentGroupId ? await findActiveTelegramKTab() : null;
+          await clearRecordingState();
+          if (previousTabId) {
+            await chrome.tabs.sendMessage(previousTabId, { type: MSG.STOP_RECORDING });
+          }
+          return { ok: true };
+        })()
+      );
+      return true;
+    }
 
     case MSG.CAPTURE_TAB: {
       if (!tabId) {
@@ -118,15 +249,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true; // keep channel open for async response
     }
 
-    case MSG.SAVE_FILES:
-      // Implemented in Phase 5.
-      sendResponse({ ok: false, error: 'Not implemented yet' });
-      break;
+    case MSG.SAVE_FILES: {
+      const { messageData, croppedDataUrl } = message;
+      if (!messageData) {
+        sendResponse({ ok: false, error: 'Missing messageData' });
+        break;
+      }
+      handleAsync(
+        saveFiles(messageData, croppedDataUrl ?? null)
+          .then(() => ({ ok: true }))
+      );
+      return true;
+    }
 
-    case MSG.AUTO_STOPPED:
-      // Implemented in Phase 5.
-      sendResponse({ ok: false, error: 'Not implemented yet' });
-      break;
+    case MSG.AUTO_STOPPED: {
+      handleAsync(
+        clearRecordingState().then(() => ({ ok: true }))
+      );
+      return true;
+    }
 
     case MSG.PING:
       sendResponse({ ok: true, type: MSG.PONG });
