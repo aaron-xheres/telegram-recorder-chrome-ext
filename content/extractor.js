@@ -15,6 +15,28 @@
  * @property {string|null} screenshotFile
  */
 
+const MESSAGE_TEXT_SELECTORS = [
+  '.translatable-message',
+  '.message-text',
+  '.text-content',
+  '.bubble-content .message',
+  '.bubble-content-wrapper .message'
+];
+
+const LINK_ANCHOR_SELECTORS = [
+  'a.anchor-url',
+  '.translatable-message a',
+  '.message-text a',
+  'a[href]'
+];
+
+const MEDIA_IMAGE_SELECTORS = [
+  '.attachment img.media-photo',
+  '.media-container img.media-photo',
+  '.attachment img',
+  '.media-container img'
+];
+
 /**
  * Walk up from a bubble to its parent bubbles-group and read the avatar's data-peer-id.
  * @param {Element} bubble
@@ -62,14 +84,30 @@ function isAnonymousSender(posterId, groupId) {
 }
 
 /**
+ * Find the message text container inside a bubble.
+ * @param {Element} bubble
+ * @returns {Element|null}
+ */
+function findMessageTextContainer(bubble) {
+  for (const selector of MESSAGE_TEXT_SELECTORS) {
+    const el = bubble.querySelector(selector);
+    if (el) return el;
+  }
+  return null;
+}
+
+/**
  * Extract text content from the bubble, stripping emoji images.
  * @param {Element} bubble
  * @returns {string|null}
  */
 function extractText(bubble) {
   try {
-    const translatable = bubble.querySelector('.translatable-message');
-    if (!translatable) return null;
+    const translatable = findMessageTextContainer(bubble);
+    if (!translatable) {
+      console.warn('[TelegramRecorder] no message text container found for', bubble.dataset.mid);
+      return null;
+    }
     const clone = translatable.cloneNode(true);
     clone.querySelectorAll('img.emoji, img.emoji-image').forEach(el => el.remove());
     return clone.textContent.trim();
@@ -86,10 +124,13 @@ function extractText(bubble) {
  */
 function extractLinks(bubble) {
   try {
-    const translatable = bubble.querySelector('.translatable-message');
-    if (!translatable) return [];
+    const translatable = findMessageTextContainer(bubble);
     const links = [];
-    translatable.querySelectorAll('a.anchor-url').forEach(a => {
+    const anchors = translatable
+      ? translatable.querySelectorAll('a.anchor-url')
+      : bubble.querySelectorAll(LINK_ANCHOR_SELECTORS.join(', '));
+
+    anchors.forEach(a => {
       const url = a.href;
       if (url && !links.includes(url)) links.push(url);
     });
@@ -108,7 +149,7 @@ function extractLinks(bubble) {
 function extractMediaImages(bubble) {
   try {
     const images = [];
-    bubble.querySelectorAll('.attachment img.media-photo, .media-container img.media-photo').forEach(img => {
+    bubble.querySelectorAll(MEDIA_IMAGE_SELECTORS.join(', ')).forEach(img => {
       if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return;
       if (img.src && !images.includes(img.src)) images.push(img.src);
     });
@@ -153,7 +194,7 @@ function extract(bubble, sessionId) {
     let images = extractMediaImages(bubble);
     let links = extractLinks(bubble);
 
-    return {
+    const record = {
       messageId,
       sessionId,
       groupId,
@@ -165,6 +206,9 @@ function extract(bubble, sessionId) {
       links,
       screenshotFile: messageId ? `${messageId}.png` : null
     };
+
+    console.log('[TelegramRecorder] extracted', messageId, { posterName, contentLength: content?.length, images: images.length, links: links.length });
+    return record;
   } catch (err) {
     console.error('[TelegramRecorder] extract failed for bubble', bubble.dataset.mid, err);
     return {
