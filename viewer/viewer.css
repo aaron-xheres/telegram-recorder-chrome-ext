@@ -38,18 +38,82 @@ body {
   gap: 12px;
 }
 
-.search-box {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
 }
 
-.search-box input {
+.card h2 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.group-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  padding: 8px 10px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.group-name {
+  font-weight: 500;
+  color: #111827;
+}
+
+.group-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.faq-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #4b5563;
+}
+
+.faq-list li {
+  margin-bottom: 6px;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filter-row label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.filter-row input {
   padding: 6px 10px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   font-size: 13px;
-  min-width: 180px;
+  min-width: 220px;
 }
 
 .button {
