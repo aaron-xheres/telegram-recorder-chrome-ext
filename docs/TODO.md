@@ -426,35 +426,38 @@
 
 > Ref: [`PLAN.md §17` — Known Limitations & Workarounds](PLAN.md#17-known-limitations--workarounds)
 
-- [ ] **10.1** Add guard in `content.js` for missing `.bubbles` container:
+- [x] **10.1** Add guard in `content.js` for missing `.bubbles` container:
   If `document.querySelector('.bubbles')` returns `null` when `START_RECORDING` is received,
   send error response to background. Background relays to popup as "No group open" state.
+  <!-- Background START_RECORDING now requires an active Telegram Web K tab and rolls back
+       if the content script is unreachable. -->
 
-- [ ] **10.2** Handle service worker wake-up rehydration:
+- [x] **10.2** Handle service worker wake-up rehydration:
   On `chrome.runtime.onStartup` and `chrome.runtime.onInstalled`, read
   `chrome.storage.local` and `chrome.storage.session`. If `recording: true` and session
   data is present, restore in-memory state without restarting recording (recording was
   interrupted — leave stopped, do not auto-resume).
 
-- [ ] **10.3** Handle content script reinjection after navigation:
+- [x] **10.3** Handle content script reinjection after navigation:
   If the user navigates away from `/k/` and back, the content script may need
   reinjection. Implement a ping/pong mechanism: popup sends `PING` before `GET_GROUP_INFO`;
   if no response, use `chrome.scripting.executeScript` to reinject.
+  <!-- "scripting" permission added to manifest.json for this. -->
 
-- [ ] **10.4** Ensure all `null` fields are rendered as `—` (em dash) consistently in the
+- [x] **10.4** Ensure all `null` fields are rendered as `—` (em dash) consistently in the
   viewer table and never as the string `"null"` or empty cell with no visual indicator.
 
-- [ ] **10.5** Add error boundary to extractor: if any extraction step throws, catch the error,
+- [x] **10.5** Add error boundary to extractor: if any extraction step throws, catch the error,
   log it with the `data-mid`, and return a partial record with `null` for failed fields
   rather than dropping the message entirely.
 
-- [ ] **10.6** Add error boundary to screenshot pipeline: if `captureVisibleTab` or canvas crop
+- [x] **10.6** Add error boundary to screenshot pipeline: if `captureVisibleTab` or canvas crop
   fails, still save the JSON record. Set `screenshotFile: null` in the record.
 
 - [ ] **10.7** Replace placeholder icon assets with final production icons:
   16×16, 48×48, 128×128 PNG. Ensure they are referenced correctly in `manifest.json`.
-  <!-- REQUIRES EXTERNAL PROGRAM: final icon design/export must come from an image editor
-       or be provided by the user; cannot be produced by the extension itself. -->
+  <!-- BLOCKED: user chose to proceed without icons for now; add assets and uncomment
+       icon references in manifest.json when ready. -->
 
 - [ ] **10.8** End-to-end smoke test:
   1. Load extension on `web.telegram.org/k/`
@@ -466,6 +469,7 @@
   7. Open viewer — open `telegram-recorder/` root — verify message appears in table
   8. Verify screenshot thumbnail loads and lightbox opens
   9. Export CSV — verify file downloads and contains correct data
+  <!-- BLOCKED: no Chrome browser / live Telegram Web K access in this environment. -->
 
 - [ ] **10.9** Test edge cases:
   - Anonymous admin message (`hide-name`): verify `posterName: null`, `posterId` = group peer ID
@@ -474,6 +478,7 @@
   - Very rapid messages (3+ in under 1 second): verify all saved in order, no skipped
   - Navigate to different chat while recording: verify auto-stop fires, no orphaned observer
   - Open viewer with empty `telegram-recorder/` folder: verify graceful empty state message
+  <!-- BLOCKED: no live Telegram Web K access in this environment. -->
 
 ---
 
