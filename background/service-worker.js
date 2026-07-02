@@ -144,6 +144,38 @@ async function saveFiles(messageData, croppedDataUrl) {
 }
 
 /**
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Capture the visible tab, retrying a few times if Chrome is not ready.
+ * Omitting windowId defaults to the currently active window.
+ * @param {number|undefined} windowId
+ * @returns {Promise<string>}
+ */
+async function captureVisibleTabWithRetry(windowId) {
+  const options = { format: 'png' };
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      if (windowId) {
+        return await chrome.tabs.captureVisibleTab(windowId, options);
+      }
+      return await chrome.tabs.captureVisibleTab(options);
+    } catch (err) {
+      lastErr = err;
+      console.warn('[TelegramRecorder] captureVisibleTab attempt', attempt, 'failed:', err?.message ?? err);
+      if (attempt < 3) await sleep(300);
+    }
+  }
+  throw lastErr ?? new Error('captureVisibleTab failed after retries');
+}
+
+/**
  * Rehydrate in-memory state from persistent/session storage.
  * Called on startup and after any service worker wake event.
  * @param {boolean} preserveRecording Whether to preserve a true `recording` flag
@@ -266,7 +298,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
       }
       handleAsync(
-        chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' })
+        captureVisibleTabWithRetry(sender.tab?.windowId)
           .then(fullDataUrl => ({ ok: true, fullDataUrl }))
       );
       return true; // keep channel open for async response
