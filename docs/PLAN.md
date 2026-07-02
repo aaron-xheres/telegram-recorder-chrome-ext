@@ -198,42 +198,73 @@ In public groups and channels the sender metadata may live inside the bubble its
 than the `bubbles-group` header, especially for forwarded channel posts:
 
 ```html
-<div class="bubble-content">
+<div class="bubbles-group">
 
-  <!-- Forwarded post: original sender rendered inside the bubble -->
-  <div class="name floating-part" dir="auto">
-    <span class="i18n bubble-name-forwarded">Forwarded from
-      <div class="avatar bubble-name-forwarded-avatar"
-           data-peer-id="-3727471819">
-        <img class="avatar-photo" src="blob:...">
+  <!-- Group-level avatar: the user who forwarded the message -->
+  <div class="bubbles-group-avatar-container">
+    <div class="avatar avatar-like avatar-40 avatar-gradient bubbles-group-avatar user-avatar"
+         data-peer-id="7655458616" data-color="orange">三</div>
+  </div>
+
+  <!-- Top-level forwarded bubble -->
+  <div class="bubble forwarded must-have-name is-in can-have-tail is-group-first is-group-last"
+       data-mid="4295141094"
+       data-peer-id="-1701501526"
+       data-timestamp="1782978702">
+    <div class="bubble-content-wrapper">
+      <div class="bubble-content">
+
+        <!-- Forwarded sender metadata rendered inside the bubble -->
+        <div class="name floating-part next-is-message" dir="auto">
+          <span class="i18n bubble-name-forwarded">Forwarded from
+            <br class="hide-ol">
+            <div class="avatar avatar-like avatar-20 avatar-gradient bubble-name-forwarded-avatar"
+                 data-peer-id="7655458616" data-color="orange">三</div>
+            <span class="peer-title" dir="auto"
+                  data-peer-id="7655458616" data-with-premium-icon="0">三</span>
+          </span>
+        </div>
+
+        <!-- Text content -->
+        <div class="message spoilers-container" dir="auto">
+          <span class="translatable-message">
+            Unlock Extra Bonuses Now!
+            <img src="assets/img/emoji/1f499.png" class="emoji emoji-image" alt="💙">
+            Rent out your bank account today!
+            <img src="assets/img/emoji/1f933.png" class="emoji emoji-image" alt="🤳">
+            Supported banks: POSB, OCBC, GXS, LiquidPay, Mari, CIMB, Trust, and more.
+          </span>
+          <span class="time">
+            <span class="i18n" dir="auto">15:51</span>
+            <div class="time-inner" title="2 July 2026, 15:51:42 Original: 2 July 2026, 15:51:31">
+              <span class="i18n" dir="auto">15:51</span>
+            </div>
+          </span>
+          <span class="clearfix"></span>
+        </div>
+
+        <svg viewBox="0 0 11 20" width="11" height="20" class="bubble-tail">
+          <use href="#message-tail-filled"></use>
+        </svg>
+
       </div>
-      <span class="peer-title" data-peer-id="-3727471819">X CREDITS</span>
-    </span>
-  </div>
-
-  <!-- Media -->
-  <div class="attachment media-container">
-    <img class="media-photo" src="blob:...">
-  </div>
-
-  <!-- Text with custom emoji / stickers / hashtags / mentions -->
-  <div class="message spoilers-container">
-    <span class="translatable-message">
-      <custom-emoji-element class="custom-emoji media-sticker-wrapper"
-                            data-sticker-emoji="✨">...</custom-emoji-element>
-      Loan details
-      <a class="mention" href="tg://resolve?domain=i8tommy">@i8tommy</a>
-      <a class="anchor-hashtag" href="tg://search_hashtag?hashtag=sgloan">#sgloan</a>
-    </span>
+    </div>
   </div>
 
 </div>
 ```
 
 Key differences:
-- Sender avatar may be `.bubble-name-forwarded-avatar[data-peer-id]` inside the bubble.
+- The bubble itself has `.bubble.forwarded.must-have-name` and the usual `data-mid`,
+  `data-peer-id` (group), and `data-timestamp` attributes.
+- Sender avatar may be `.bubble-name-forwarded-avatar[data-peer-id]` inside the bubble
+  (authoritative for the original forwarded sender). A `.bubbles-group-avatar` is still
+  present at the group level and is used as a fallback.
 - Sender name is `.bubble-name-forwarded .peer-title`.
-- Custom emoji/stickers use `<custom-emoji-element>` and `<custom-emoji-renderer-element>`.
+- Standard emoji are `<img class="emoji emoji-image">` in addition to Telegram's
+  `<custom-emoji-element>` / `<custom-emoji-renderer-element>` stickers.
+- The inline timestamp contains a nested `.time-inner` with an "Original: ..." tooltip;
+  timestamp elements must be stripped from extracted text.
 - Hashtags use `a.anchor-hashtag`; mentions use `a.mention`.
 
 ### Non-Forwarded Public Group Message
