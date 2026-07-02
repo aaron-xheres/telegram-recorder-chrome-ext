@@ -144,27 +144,39 @@ async function saveFiles(messageData, croppedDataUrl) {
 /**
  * Rehydrate in-memory state from persistent/session storage.
  * Called on startup and after any service worker wake event.
+ * @param {boolean} preserveRecording Whether to preserve a true `recording` flag
+ *   (used on normal wake). On browser startup or extension install the session is
+ *   interrupted, so recording is left stopped.
  */
-async function rehydrateState() {
+async function rehydrateState(preserveRecording = true) {
   const local = await chrome.storage.local.get(STORAGE_LOCAL_KEYS);
-  state.recording = Boolean(local.recording);
+  state.recording = preserveRecording ? Boolean(local.recording) : false;
   state.currentSessionId = local.currentSessionId ?? null;
   state.currentGroupId = local.currentGroupId ?? null;
   state.currentGroupName = local.currentGroupName ?? null;
 
   const session = await chrome.storage.session.get(STORAGE_SESSION_KEY);
   recordedSet = Array.isArray(session.recordedSet) ? session.recordedSet : [];
+
+  if (!preserveRecording && local.recording) {
+    // Browser restarted / extension installed while a session was active. Leave it stopped
+    // and update storage so content scripts do not try to reattach on next load.
+    await persistState();
+  }
 }
 
-// Initial rehydration.
-rehydrateState().catch(err => console.error('[TelegramRecorder] rehydrate failed', err));
+// Initial rehydration (normal service worker wake) — preserve recording so the content
+// script can reattach if the browser session is still alive.
+rehydrateState(true).catch(err => console.error('[TelegramRecorder] rehydrate failed', err));
 
 chrome.runtime.onStartup.addListener(() => {
-  rehydrateState().catch(err => console.error('[TelegramRecorder] startup rehydrate failed', err));
+  // Browser restarted: recording cannot survive the restart.
+  rehydrateState(false).catch(err => console.error('[TelegramRecorder] startup rehydrate failed', err));
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  rehydrateState().catch(err => console.error('[TelegramRecorder] install rehydrate failed', err));
+  // Extension installed/updated: do not auto-resume any previous recording.
+  rehydrateState(false).catch(err => console.error('[TelegramRecorder] install rehydrate failed', err));
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -203,6 +215,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       handleAsync(
         (async () => {
+          const tabId = await findActiveTelegramKTab();
+          if (!tabId) {
+            return { ok: false, error: 'No active Telegram Web K tab found' };
+          }
+
           const sessionId = Date.now().toString();
           state.recording = true;
           state.currentSessionId = sessionId;
@@ -213,10 +230,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           await chrome.storage.session.set({ recordedSet: [] });
           await saveManifest(sessionId, groupId, groupName ?? '');
 
-          const tabId = await findActiveTelegramKTab();
-          if (tabId) {
+          try {
             await chrome.tabs.sendMessage(tabId, { type: MSG.START_RECORDING, sessionId });
+          } catch (err) {
+            // Content script not reachable — roll back to a clean stopped state.
+            await clearRecordingState();
+            return { ok: false, error: 'Could not reach content script: ' + (err.message ?? String(err)) };
           }
+
           return { ok: true, sessionId };
         })()
       );

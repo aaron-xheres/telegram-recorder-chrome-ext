@@ -126,42 +126,58 @@ function extractMediaImages(bubble) {
  * @returns {MessageRecord}
  */
 function extract(bubble, sessionId) {
-  const messageId = bubble.dataset.mid ?? null;
-  const groupId = bubble.dataset.peerId ?? null;
-  const rawTimestamp = bubble.dataset.timestamp;
+  try {
+    const messageId = bubble.dataset.mid ?? null;
+    const groupId = bubble.dataset.peerId ?? null;
+    const rawTimestamp = bubble.dataset.timestamp;
 
-  let timestamp = '';
-  if (rawTimestamp) {
-    try {
-      timestamp = new Date(Number(rawTimestamp) * 1000).toISOString();
-    } catch (err) {
-      console.error('[TelegramRecorder] invalid timestamp', rawTimestamp, err);
-      timestamp = '';
+    let timestamp = '';
+    if (rawTimestamp) {
+      try {
+        timestamp = new Date(Number(rawTimestamp) * 1000).toISOString();
+      } catch (err) {
+        console.error('[TelegramRecorder] invalid timestamp', rawTimestamp, err);
+        timestamp = '';
+      }
     }
+
+    let posterId = resolveSenderPeerId(bubble);
+    let posterName = resolveSenderName(bubble);
+
+    if (isAnonymousSender(posterId, groupId)) {
+      posterId = groupId;
+      posterName = null;
+    }
+
+    let content = extractText(bubble);
+    let images = extractMediaImages(bubble);
+    let links = extractLinks(bubble);
+
+    return {
+      messageId,
+      sessionId,
+      groupId,
+      posterName,
+      posterId,
+      content,
+      timestamp,
+      images,
+      links,
+      screenshotFile: messageId ? `${messageId}.png` : null
+    };
+  } catch (err) {
+    console.error('[TelegramRecorder] extract failed for bubble', bubble.dataset.mid, err);
+    return {
+      messageId: bubble.dataset.mid ?? null,
+      sessionId,
+      groupId: bubble.dataset.peerId ?? null,
+      posterName: null,
+      posterId: null,
+      content: null,
+      timestamp: '',
+      images: [],
+      links: [],
+      screenshotFile: null
+    };
   }
-
-  let posterId = resolveSenderPeerId(bubble);
-  let posterName = resolveSenderName(bubble);
-
-  if (isAnonymousSender(posterId, groupId)) {
-    posterId = groupId;
-    posterName = null;
-  }
-
-  let content = extractText(bubble);
-  let images = extractMediaImages(bubble);
-  let links = extractLinks(bubble);
-
-  return {
-    messageId,
-    sessionId,
-    groupId,
-    posterName,
-    posterId,
-    content,
-    timestamp,
-    images,
-    links,
-    screenshotFile: messageId ? `${messageId}.png` : null
-  };
 }
