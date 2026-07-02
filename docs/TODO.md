@@ -189,6 +189,13 @@
 - [x] **3.c.6** Update `extractMediaImages(bubble)` to exclude sticker/emoji images
   inside `custom-emoji-element` / `custom-emoji-renderer-element`.
 
+- [x] **3.c.7** Refine `resolveSenderName(bubble)` for public-group names with emoji status:
+  Prefer `.peer-title-inner` text when present, so `.emoji-status` canvas/SVG text is not
+  appended to the sender name.
+
+- [x] **3.c.8** Normalize extracted message text whitespace after removing custom emoji
+  and stickers to prevent huge space/newline runs from empty wrapper elements.
+
 ### 3b — `content/content.js`
 
 - [x] **3.8** On script load, read recording state from `chrome.storage.local`. If `recording`

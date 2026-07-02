@@ -236,6 +236,54 @@ Key differences:
 - Custom emoji/stickers use `<custom-emoji-element>` and `<custom-emoji-renderer-element>`.
 - Hashtags use `a.anchor-hashtag`; mentions use `a.mention`.
 
+### Non-Forwarded Public Group Message
+
+Regular public-group messages keep the same `.bubbles-group` clustering as private groups,
+but the `.peer-title` can contain an `.emoji-status` decoration alongside the visible name:
+
+```html
+<div class="bubbles-group">
+  <div class="bubbles-group-avatar-container">
+    <div class="avatar bubbles-group-avatar user-avatar" data-peer-id="8313477730">
+      <img class="avatar-photo" src="blob:...">
+    </div>
+  </div>
+
+  <div class="bubble is-in can-have-tail is-group-first"
+       data-mid="10145"
+       data-peer-id="-1701501526"
+       data-timestamp="1782899304">
+    <div class="bubble-content-wrapper">
+      <div class="bubble-content">
+
+        <div class="colored-name name floating-part" data-peer-id="8313477730">
+          <span class="peer-title with-icons" data-peer-id="8313477730" dir="auto">
+            <span class="peer-title-inner">Max Teh</span>
+            <span class="emoji-status">…</span>
+          </span>
+        </div>
+
+        <div class="message spoilers-container">
+          <span class="translatable-message">
+            WTS
+            <custom-emoji-element class="custom-emoji media-sticker-wrapper" data-sticker-emoji="✨">…</custom-emoji-element>
+            MacBook Air M3
+            <custom-emoji-element>…</custom-emoji-element>
+            <a class="mention" href="https://t.me/SGMaxTehh">@SGMaxTehh</a>
+          </span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+Name extraction must prefer `.peer-title-inner` when it exists, otherwise the sibling
+`.emoji-status` canvas/SVG text can be appended to the sender name. Text extraction strips
+all `<custom-emoji-element>` / `<custom-emoji-renderer-element>` children and normalizes
+runs of whitespace to single spaces.
+
 ### System / Service Messages
 
 System messages (join events, pinned message notifications, etc.) appear as DOM additions to
