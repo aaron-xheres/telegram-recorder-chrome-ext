@@ -84,29 +84,28 @@
    * @returns {string|null}
    */
   function getGroupId() {
-    // Prefer the bubbles container's data-peer-id when available.
+    // Telegram Web K puts the current chat identifier in the URL.
+    // Prefer it because the DOM may lag behind navigation.
+    const hash = location.hash?.replace(/^#/, '');
+    if (hash) {
+      if (/^-?\d+$/.test(hash)) {
+        return hash;
+      }
+      const usernameMatch = hash.match(/^@([a-zA-Z0-9_]+)/);
+      if (usernameMatch) {
+        return '@' + usernameMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
+      }
+    }
+
+    const usernameMatch = location.pathname.match(/@([a-zA-Z0-9_]+)/);
+    if (usernameMatch) {
+      return '@' + usernameMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
+    }
+
+    // Fallback to the bubbles container's data-peer-id.
     const bubbles = document.querySelector(BUBBLES_SELECTOR);
     if (bubbles?.dataset.peerId) {
       return bubbles.dataset.peerId;
-    }
-
-    // Look for any other chat-level peer-id element.
-    const chatPeer = document.querySelector('[data-peer-id]');
-    const chatPeerId = chatPeer?.dataset.peerId;
-    if (chatPeerId && /^-?\d+$/.test(chatPeerId)) {
-      return chatPeerId;
-    }
-
-    // Fallback: Telegram Web K puts the current chat peer ID in the URL hash.
-    const hash = location.hash?.replace(/^#/, '');
-    if (hash && /^-?\d+$/.test(hash)) {
-      return hash;
-    }
-
-    // Fallback for public group/channel URLs like /k/@groupname or /k/#@groupname.
-    const usernameMatch = (location.pathname + location.hash).match(/@([a-zA-Z0-9_]+)/);
-    if (usernameMatch) {
-      return '@' + usernameMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
     }
 
     return null;
@@ -133,23 +132,8 @@
    * @returns {string|null}
    */
   function getGroupName() {
-    const groupId = getGroupId();
-
-    // Prefer elements explicitly tied to the current chat peer ID.
-    if (groupId) {
-      const peerSelectors = [
-        `.peer-title[data-peer-id="${groupId}"]`,
-        `[data-peer-id="${groupId}"] .peer-title`,
-        `.chat-info [data-peer-id="${groupId}"] .peer-title`
-      ];
-      for (const selector of peerSelectors) {
-        const title = document.querySelector(selector);
-        const text = title?.textContent?.trim();
-        if (text) return text;
-      }
-    }
-
-    // Fallback to generic chat-info/title selectors.
+    // Use generic chat-info/title selectors. Avoid peer-id-specific selectors
+    // because the DOM may still contain elements from a previously viewed chat.
     for (const selector of GROUP_NAME_SELECTORS) {
       const title = document.querySelector(selector);
       const text = title?.textContent?.trim();
@@ -418,7 +402,7 @@
     switch (message.type) {
       case CONTENT_MSG.GET_GROUP_INFO: {
         const info = { ok: true, groupId: getGroupId(), groupName: getGroupName() };
-        console.log('[TelegramRecorder] GET_GROUP_INFO', info);
+        console.log('[TelegramRecorder] GET_GROUP_INFO', location.href, info);
         sendResponse(info);
         break;
       }
