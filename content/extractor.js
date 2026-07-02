@@ -1,30 +1,167 @@
-// Message extraction utilities — populated in Phase 3.
-// Classic script; functions are defined in the content-script global scope.
+// Message extraction utilities for Telegram Web K.
+// Converts a message bubble DOM element into a structured record.
 
+/**
+ * @typedef {Object} MessageRecord
+ * @property {string} messageId
+ * @property {string} sessionId
+ * @property {string} groupId
+ * @property {string|null} posterName
+ * @property {string|null} posterId
+ * @property {string|null} content
+ * @property {string} timestamp
+ * @property {string[]} images
+ * @property {string[]} links
+ * @property {string|null} screenshotFile
+ */
+
+/**
+ * Walk up from a bubble to its parent bubbles-group and read the avatar's data-peer-id.
+ * @param {Element} bubble
+ * @returns {string|null}
+ */
 function resolveSenderPeerId(bubble) {
-  return null;
+  try {
+    const group = bubble.closest('.bubbles-group');
+    if (!group) return null;
+    const avatar = group.querySelector('.bubbles-group-avatar[data-peer-id]');
+    return avatar?.dataset.peerId ?? null;
+  } catch (err) {
+    console.error('[TelegramRecorder] resolveSenderPeerId failed', err);
+    return null;
+  }
 }
 
+/**
+ * Read the sender display name from the bubble's peer-title element.
+ * @param {Element} bubble
+ * @returns {string|null}
+ */
 function resolveSenderName(bubble) {
-  return null;
+  try {
+    const title = bubble.querySelector('.colored-name .peer-title, span.peer-title');
+    return title?.textContent?.trim() ?? null;
+  } catch (err) {
+    console.error('[TelegramRecorder] resolveSenderName failed', err);
+    return null;
+  }
 }
 
+/**
+ * Determine whether the sender is anonymous (admin posting as group or channel post).
+ * @param {string|null} posterId
+ * @param {string} groupId
+ * @returns {boolean}
+ */
 function isAnonymousSender(posterId, groupId) {
+  if (!posterId) return true;
+  if (posterId === groupId) return true;
+  // Negative peer IDs represent anonymous/group/channel entities in Telegram.
+  if (posterId.startsWith('-')) return true;
   return false;
 }
 
+/**
+ * Extract text content from the bubble, stripping emoji images.
+ * @param {Element} bubble
+ * @returns {string|null}
+ */
 function extractText(bubble) {
-  return null;
+  try {
+    const translatable = bubble.querySelector('.translatable-message');
+    if (!translatable) return null;
+    const clone = translatable.cloneNode(true);
+    clone.querySelectorAll('img.emoji, img.emoji-image').forEach(el => el.remove());
+    return clone.textContent.trim();
+  } catch (err) {
+    console.error('[TelegramRecorder] extractText failed', err);
+    return null;
+  }
 }
 
+/**
+ * Extract unique absolute URLs from anchor tags in the message text.
+ * @param {Element} bubble
+ * @returns {string[]}
+ */
 function extractLinks(bubble) {
-  return [];
+  try {
+    const translatable = bubble.querySelector('.translatable-message');
+    if (!translatable) return [];
+    const links = [];
+    translatable.querySelectorAll('a.anchor-url').forEach(a => {
+      const url = a.href;
+      if (url && !links.includes(url)) links.push(url);
+    });
+    return links;
+  } catch (err) {
+    console.error('[TelegramRecorder] extractLinks failed', err);
+    return [];
+  }
 }
 
+/**
+ * Extract media image blob URLs from the bubble.
+ * @param {Element} bubble
+ * @returns {string[]}
+ */
 function extractMediaImages(bubble) {
-  return [];
+  try {
+    const images = [];
+    bubble.querySelectorAll('.attachment img.media-photo, .media-container img.media-photo').forEach(img => {
+      if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return;
+      if (img.src && !images.includes(img.src)) images.push(img.src);
+    });
+    return images;
+  } catch (err) {
+    console.error('[TelegramRecorder] extractMediaImages failed', err);
+    return [];
+  }
 }
 
+/**
+ * Orchestrate extraction of a full message record.
+ * @param {Element} bubble
+ * @param {string} sessionId
+ * @returns {MessageRecord}
+ */
 function extract(bubble, sessionId) {
-  return {};
+  const messageId = bubble.dataset.mid ?? null;
+  const groupId = bubble.dataset.peerId ?? null;
+  const rawTimestamp = bubble.dataset.timestamp;
+
+  let timestamp = '';
+  if (rawTimestamp) {
+    try {
+      timestamp = new Date(Number(rawTimestamp) * 1000).toISOString();
+    } catch (err) {
+      console.error('[TelegramRecorder] invalid timestamp', rawTimestamp, err);
+      timestamp = '';
+    }
+  }
+
+  let posterId = resolveSenderPeerId(bubble);
+  let posterName = resolveSenderName(bubble);
+
+  if (isAnonymousSender(posterId, groupId)) {
+    posterId = groupId;
+    posterName = null;
+  }
+
+  let content = extractText(bubble);
+  let images = extractMediaImages(bubble);
+  let links = extractLinks(bubble);
+
+  return {
+    messageId,
+    sessionId,
+    groupId,
+    posterName,
+    posterId,
+    content,
+    timestamp,
+    images,
+    links,
+    screenshotFile: messageId ? `${messageId}.png` : null
+  };
 }
