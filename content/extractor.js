@@ -81,6 +81,8 @@ function resolveSenderPeerId(bubble) {
 
 /**
  * Read the sender display name from the bubble's peer-title element.
+ * Public groups sometimes wrap the visible name in .peer-title-inner and add an
+ * .emoji-status sibling; prefer the inner element to avoid polluting the name.
  * @param {Element} bubble
  * @returns {string|null}
  */
@@ -88,7 +90,10 @@ function resolveSenderName(bubble) {
   try {
     // Forwarded posts expose the original sender's title inside the bubble.
     const title = bubble.querySelector('.bubble-name-forwarded .peer-title, .colored-name .peer-title, span.peer-title');
-    return title?.textContent?.trim() ?? null;
+    if (!title) return null;
+    const inner = title.querySelector('.peer-title-inner');
+    const text = (inner?.textContent ?? title.textContent).trim();
+    return text || null;
   } catch (err) {
     console.error('[TelegramRecorder] resolveSenderName failed', err);
     return null;
@@ -138,7 +143,9 @@ function extractText(bubble) {
     clone.querySelectorAll(EMOJI_ELEMENT_SELECTORS.join(', ')).forEach(el => el.remove());
     // Strip Telegram's inline message timestamp so it isn't appended to content.
     clone.querySelectorAll(TIMESTAMP_SELECTORS.join(', ')).forEach(el => el.remove());
-    return clone.textContent.trim();
+    // Telegram interleaves a lot of custom-emoji/sticker whitespace; collapse runs
+    // so the extracted text remains readable and line counts don't explode.
+    return clone.textContent.replace(/\s+/g, ' ').trim();
   } catch (err) {
     console.error('[TelegramRecorder] extractText failed', err);
     return null;
