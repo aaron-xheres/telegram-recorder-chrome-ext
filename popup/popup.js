@@ -63,9 +63,11 @@ function setVisible(el, visible) {
 async function sendToContent(message) {
   try {
     const pingResponse = await chrome.tabs.sendMessage(activeTabId, { type: POPUP_MSG.PING });
+    console.log('[TelegramRecorder] ping response', pingResponse);
     if (pingResponse?.ok) {
       return await chrome.tabs.sendMessage(activeTabId, message);
     }
+    console.log('[TelegramRecorder] ping not ok; reinjecting content scripts');
   } catch (err) {
     console.log('[TelegramRecorder] content script not responding; reinjecting', err);
   }
@@ -78,16 +80,21 @@ async function sendToContent(message) {
 
   // Give the scripts a moment to register listeners.
   await new Promise(resolve => setTimeout(resolve, 100));
-  return await chrome.tabs.sendMessage(activeTabId, message);
+  const response = await chrome.tabs.sendMessage(activeTabId, message);
+  console.log('[TelegramRecorder] post-reinjection response', response);
+  return response;
 }
 
 async function fetchGroupInfo() {
   if (!isWebK(activeTabUrl)) {
+    console.log('[TelegramRecorder] not Web K, skipping group info', activeTabUrl);
     return { groupId: null, groupName: null };
   }
 
   try {
+    console.log('[TelegramRecorder] fetching group info from tab', activeTabId);
     const response = await sendToContent({ type: POPUP_MSG.GET_GROUP_INFO });
+    console.log('[TelegramRecorder] group info response', response);
     return {
       groupId: response?.groupId ?? null,
       groupName: response?.groupName ?? null
