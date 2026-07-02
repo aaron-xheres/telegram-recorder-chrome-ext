@@ -1,6 +1,8 @@
 // Background service worker for Telegram Message Recorder.
 // Coordinates state, storage, downloads, and messaging between popup and content scripts.
 
+importScripts('../shared/messages.js');
+
 // eslint-disable-next-line no-undef
 const MSG = MESSAGE_TYPES;
 
