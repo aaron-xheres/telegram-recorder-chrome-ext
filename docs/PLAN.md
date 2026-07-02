@@ -500,20 +500,22 @@ message text, not standalone media attachments.
 ```
 1. element.scrollIntoView({ block: 'center', behavior: 'instant' })
 2. await 150ms  — allow repaint to settle
-3. rect = element.getBoundingClientRect()
-4. dpr = window.devicePixelRatio  — account for retina displays
+3. await requestAnimationFrame  — ensure scroll position is reflected
+4. rect = element.getBoundingClientRect()
+5. dpr = window.devicePixelRatio  — account for retina displays
 
-5. content.js → background: { type: 'CAPTURE_TAB', tabId }
-6. background: chrome.tabs.captureVisibleTab(tabId, { format: 'png' })
+6. content.js → background: { type: 'CAPTURE_TAB' }
+7. background: chrome.tabs.captureVisibleTab({ format: 'png' }) with 3 retries
    → fullDataUrl (entire visible tab as PNG base64)
-7. background → content.js: { fullDataUrl }
+8. background → content.js: { fullDataUrl }
+9. content.js retries the message up to 3 times if fullDataUrl is missing
 
-8. content.js: create <canvas> width=(rect.width × dpr), height=(rect.height × dpr)
-9. img.onload: ctx.drawImage(fullImg, -(rect.left × dpr), -(rect.top × dpr))
-10. croppedDataUrl = canvas.toDataURL('image/png')
+10. content.js: create <canvas> width=(rect.width × dpr), height=(rect.height × dpr)
+11. img.onload: ctx.drawImage(fullImg, -(rect.left × dpr), -(rect.top × dpr))
+12. croppedDataUrl = canvas.toDataURL('image/png')
 
-11. content.js → background: { type: 'SAVE_FILES', messageData, croppedDataUrl }
-12. background: chrome.downloads.download() × 2
+13. content.js → background: { type: 'SAVE_FILES', messageData, croppedDataUrl }
+14. background: chrome.downloads.download() × 2
       filename: `telegram-recorder/{groupId}/{messageId}.png`
       filename: `telegram-recorder/{groupId}/{messageId}.json`
 ```
@@ -524,6 +526,10 @@ message text, not standalone media attachments.
   the active Telegram tab, so this is always satisfied.
 - `scrollIntoView` with `behavior: 'instant'` prevents animation delay. 150ms wait is the
   minimum observed for repaint; adjust if screenshots show partially rendered content.
+- Both the content script and the service worker retry the capture up to 3 times with short
+  delays, because `captureVisibleTab` can occasionally return an empty result while the page
+  is still painting or the window focus is transitioning. JSON is still saved if all retries
+  fail.
 - Canvas crop uses `dpr` to correctly handle retina/HiDPI screens — without this, crops would
   be offset by a 2× factor on Retina displays.
 

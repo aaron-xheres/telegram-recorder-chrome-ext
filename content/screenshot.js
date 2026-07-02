@@ -57,10 +57,13 @@ function cropToRect(fullDataUrl, rect, dpr) {
  * @param {Element} bubble
  * @returns {Promise<string|null>}
  */
-async function captureScreenshot(bubble) {
+  async function captureScreenshot(bubble) {
   try {
     bubble.scrollIntoView({ block: 'center', behavior: 'instant' });
+    // Give Telegram a moment to finish layout/paint, then wait for the next frame
+    // so the scroll position is reflected before capture.
     await sleep(CAPTURE_WAIT_MS);
+    await new Promise(resolve => requestAnimationFrame(resolve));
 
     const rect = bubble.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) {
@@ -70,9 +73,18 @@ async function captureScreenshot(bubble) {
 
     const dpr = window.devicePixelRatio || 1;
 
-    const response = await chrome.runtime.sendMessage({ type: SCREENSHOT_MSG.CAPTURE_TAB });
+    // Capture can be flaky when the window/tab is not fully focused or still painting.
+    // Retry a few times before giving up; JSON is still saved on failure.
+    let response = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      response = await chrome.runtime.sendMessage({ type: SCREENSHOT_MSG.CAPTURE_TAB });
+      if (response?.ok && response.fullDataUrl) break;
+      console.warn('[TelegramRecorder] CAPTURE_TAB attempt', attempt, 'failed', response);
+      if (attempt < 3) await sleep(200);
+    }
+
     if (!response || !response.ok || !response.fullDataUrl) {
-      console.error('[TelegramRecorder] CAPTURE_TAB failed', response);
+      console.error('[TelegramRecorder] CAPTURE_TAB failed after retries', response);
       return null;
     }
 
