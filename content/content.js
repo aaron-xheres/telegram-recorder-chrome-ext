@@ -114,6 +114,23 @@
    * @returns {string|null}
    */
   function getGroupName() {
+    const groupId = getGroupId();
+
+    // Prefer elements explicitly tied to the current chat peer ID.
+    if (groupId) {
+      const peerSelectors = [
+        `.peer-title[data-peer-id="${groupId}"]`,
+        `[data-peer-id="${groupId}"] .peer-title`,
+        `.chat-info [data-peer-id="${groupId}"] .peer-title`
+      ];
+      for (const selector of peerSelectors) {
+        const title = document.querySelector(selector);
+        const text = title?.textContent?.trim();
+        if (text) return text;
+      }
+    }
+
+    // Fallback to generic chat-info/title selectors.
     for (const selector of GROUP_NAME_SELECTORS) {
       const title = document.querySelector(selector);
       const text = title?.textContent?.trim();
