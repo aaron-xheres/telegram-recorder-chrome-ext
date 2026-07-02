@@ -37,6 +37,15 @@ const MEDIA_IMAGE_SELECTORS = [
   '.media-container img'
 ];
 
+const TIMESTAMP_SELECTORS = [
+  '.time',
+  '.message-time',
+  '.bubble-time',
+  '.time-inner',
+  '.message-time-text',
+  '[class*="time"]'
+];
+
 /**
  * Walk up from a bubble to its parent bubbles-group and read the avatar's data-peer-id.
  * @param {Element} bubble
@@ -110,6 +119,8 @@ function extractText(bubble) {
     }
     const clone = translatable.cloneNode(true);
     clone.querySelectorAll('img.emoji, img.emoji-image').forEach(el => el.remove());
+    // Strip Telegram's inline message timestamp so it isn't appended to content.
+    clone.querySelectorAll(TIMESTAMP_SELECTORS.join(', ')).forEach(el => el.remove());
     return clone.textContent.trim();
   } catch (err) {
     console.error('[TelegramRecorder] extractText failed', err);
