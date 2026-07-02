@@ -7,11 +7,65 @@
   <link rel="stylesheet" href="viewer.css">
 </head>
 <body>
-  <div id="app">
-    <h1>Telegram Recorder — Viewer</h1>
-    <p>Click “Open Folder” to load your telegram-recorder directory.</p>
-    <button id="open-folder">Open Folder</button>
+  <div id="app" class="viewer">
+    <header class="viewer-header">
+      <h1>Telegram Recorder — Viewer</h1>
+      <div class="toolbar">
+        <button id="open-folder" class="button">Open Folder</button>
+        <button id="export-csv" class="button" disabled>Export CSV</button>
+        <div class="search-box">
+          <label for="name-search">Search:</label>
+          <input id="name-search" type="search" placeholder="Poster name…" autocomplete="off">
+        </div>
+      </div>
+    </header>
+
+    <section id="folder-info" class="folder-info hidden">
+      <span id="folder-name">No folder loaded</span>
+    </section>
+
+    <section id="sessions-section" class="sessions-section hidden">
+      <button id="sessions-toggle" class="accordion-toggle" aria-expanded="false">
+        ▶ Sessions
+      </button>
+      <div id="sessions-panel" class="sessions-panel hidden">
+        <div class="session-actions">
+          <button id="select-all-sessions" class="button button-small">Select All</button>
+          <button id="deselect-all-sessions" class="button button-small">Deselect All</button>
+        </div>
+        <ul id="sessions-list" class="sessions-list"></ul>
+      </div>
+    </section>
+
+    <section id="table-section" class="table-section">
+      <div id="empty-state" class="empty-state">
+        Click “Open Folder” to load your <code>telegram-recorder</code> directory.
+      </div>
+      <div id="table-container" class="table-container hidden">
+        <table id="records-table" class="records-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-column="timestamp">Timestamp <span class="sort-arrow"></span></th>
+              <th class="sortable" data-column="session">Session <span class="sort-arrow"></span></th>
+              <th class="sortable" data-column="group">Group <span class="sort-arrow"></span></th>
+              <th class="sortable" data-column="posterName">Poster Name <span class="sort-arrow"></span></th>
+              <th class="sortable" data-column="posterId">Poster ID <span class="sort-arrow"></span></th>
+              <th>Message Content</th>
+              <th>Images</th>
+              <th>Links</th>
+              <th>Screenshot</th>
+            </tr>
+          </thead>
+          <tbody id="records-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div id="lightbox" class="lightbox hidden">
+      <img id="lightbox-img" src="" alt="Screenshot">
+    </div>
   </div>
+
   <script src="../shared/messages.js"></script>
   <script src="viewer.js"></script>
 </body>
