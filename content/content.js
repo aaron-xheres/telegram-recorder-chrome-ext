@@ -26,13 +26,18 @@
   var currentGroupId = '';
   var baselineSet = new Set();
   var recordedSet = new Set();
-  var observer = null;
-  /** @type {QueueItem[]} */
-  var queue = [];
+
   var isProcessing = false;
   var navPollInterval = null;
   var lastLocationHref = location.href;
   var eventAbortController = new AbortController();
+
+  /** @type {MutationObserver|null} */
+  var bubblesObserver = null;
+  /** @type {MutationObserver[]} */
+  var groupObservers = [];
+  /** @type {QueueItem[]} */
+  var queue = [];
 
   const GROUP_NAME_SELECTORS = [
     '.chat-info .peer-title',
@@ -191,26 +196,71 @@
    * @param {MutationRecord[]} mutations
    */
   function handleMutations(mutations) {
-    let detected = 0;
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+    try {
+      let detected = 0;
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
-        if (node.classList.contains('bubble')) {
-          processBubbleNode(node);
-          detected++;
-          continue;
-        }
+          if (node.classList.contains('bubble')) {
+            processBubbleNode(node);
+            detected++;
+            continue;
+          }
 
-        if (node.querySelectorAll) {
-          const bubbles = node.querySelectorAll('.bubble');
-          bubbles.forEach(processBubbleNode);
-          detected += bubbles.length;
+          if (node.querySelectorAll) {
+            const bubbles = node.querySelectorAll('.bubble');
+            bubbles.forEach(processBubbleNode);
+            detected += bubbles.length;
+          }
         }
       }
+      if (detected > 0) {
+        console.log('[TelegramRecorder] mutation detected', detected, 'bubble(s)');
+      }
+    } catch (err) {
+      console.error('[TelegramRecorder] mutation handler error', err);
     }
-    if (detected > 0) {
-      console.log('[TelegramRecorder] mutation detected', detected, 'bubble(s)');
+  }
+
+  /**
+   * Observe a single bubbles-group for new child bubbles.
+   * @param {Element} group
+   */
+  function observeGroup(group) {
+    if (!group || group.__telegramRecorderObserved) return;
+    group.__telegramRecorderObserved = true;
+    const obs = new MutationObserver(handleMutations);
+    obs.observe(group, { childList: true });
+    groupObservers.push(obs);
+  }
+
+  /**
+   * Handle new bubbles-groups added to the main container.
+   * @param {MutationRecord[]} mutations
+   */
+  function handleBubblesContainerMutations(mutations) {
+    try {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+          if (node.classList.contains('bubbles-group')) {
+            observeGroup(node);
+            node.querySelectorAll('.bubble').forEach(processBubbleNode);
+            continue;
+          }
+
+          if (node.querySelectorAll) {
+            node.querySelectorAll('.bubbles-group').forEach(group => {
+              observeGroup(group);
+              group.querySelectorAll('.bubble').forEach(processBubbleNode);
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[TelegramRecorder] container mutation handler error', err);
     }
   }
 
@@ -257,8 +307,12 @@
     baselineSet = buildBaselineSet();
     recordedSet = new Set();
 
-    observer = new MutationObserver(handleMutations);
-    observer.observe(bubbles, { childList: true, subtree: true });
+    // Observe existing groups.
+    bubbles.querySelectorAll('.bubbles-group').forEach(observeGroup);
+
+    // Observe the container for new groups (no subtree — avoids interfering with Telegram internals).
+    bubblesObserver = new MutationObserver(handleBubblesContainerMutations);
+    bubblesObserver.observe(bubbles, { childList: true });
 
     startNavPolling();
     console.log('[TelegramRecorder] started recording', { sessionId, groupId: currentGroupId });
@@ -269,10 +323,15 @@
     currentSessionId = '';
     currentGroupId = '';
 
-    if (observer) {
-      observer.disconnect();
-      observer = null;
+    if (bubblesObserver) {
+      bubblesObserver.disconnect();
+      bubblesObserver = null;
     }
+    groupObservers.forEach(obs => obs.disconnect());
+    groupObservers = [];
+    document.querySelectorAll('.bubbles-group').forEach(g => {
+      g.__telegramRecorderObserved = false;
+    });
 
     baselineSet.clear();
     recordedSet.clear();
