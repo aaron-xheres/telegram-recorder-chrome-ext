@@ -106,7 +106,7 @@
     // Fallback for public group/channel URLs like /k/@groupname.
     const usernameMatch = location.pathname.match(/@([a-zA-Z0-9_]+)/);
     if (usernameMatch) {
-      return '@' + usernameMatch[1];
+      return '@' + usernameMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
     }
 
     return null;
@@ -298,6 +298,11 @@
 
     recordedSet.add(mid);
     const messageData = extract(bubble, currentSessionId);
+    // Ensure every record in this session uses the same group identifier
+    // (numeric peer ID or sanitized @username) as the manifest/folder.
+    if (!messageData.groupId || messageData.groupId !== currentGroupId) {
+      messageData.groupId = currentGroupId;
+    }
     console.log('[TelegramRecorder] queued new message', mid, messageData.posterName);
     enqueue(bubble, messageData);
   }
