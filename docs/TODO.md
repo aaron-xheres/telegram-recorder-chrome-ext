@@ -264,42 +264,43 @@
 > Ref: [`PLAN.md §12` — Extension Popup Specification](PLAN.md#12-extension-popup--specification),
 > [`PLAN.md §11` — Software Flows](PLAN.md#11-software-flows)
 
-- [ ] **6.1** Build `popup/popup.html` full structure:
+- [x] **6.1** Build `popup/popup.html` full structure:
   Sections for: page-validation notice, group info block, recording status block,
   start/stop button, viewer link button. All sections present in DOM; visibility toggled
   by JS.
 
-- [ ] **6.2** Style `popup/popup.css`:
+- [x] **6.2** Style `popup/popup.css`:
   Minimum popup width 280px. Clear visual distinction between "Recording" (e.g. red indicator)
   and "Stopped" (grey). No icon-only state indicators — always include a text label.
 
-- [ ] **6.3** Implement URL validation in `popup/popup.js` on popup open:
+- [x] **6.3** Implement URL validation in `popup/popup.js` on popup open:
   Query active tab URL. Determine which of the 5 states applies
   (see [`PLAN.md §12`](PLAN.md#12-extension-popup--specification) states table).
   Show/hide correct sections.
 
-- [ ] **6.4** Implement "Switch to Telegram Web K" button:
+- [x] **6.4** Implement "Switch to Telegram Web K" button:
   On click: `chrome.tabs.update({ url: 'https://web.telegram.org/k/' })` then close popup.
 
-- [ ] **6.5** Implement `GET_GROUP_INFO` call in popup:
+- [x] **6.5** Implement `GET_GROUP_INFO` call in popup:
   `chrome.tabs.sendMessage(tabId, { type: 'GET_GROUP_INFO' })`.
   On response: render group name and group ID. On no response / null: render "No group open".
+  <!-- Added PING reinjection fallback ahead of Phase 10.3 for robustness. -->
 
-- [ ] **6.6** Read `chrome.storage.local` on popup open:
+- [x] **6.6** Read `chrome.storage.local` on popup open:
   Render `recording`, `currentSessionId`, `currentGroupId`, `currentGroupName` into UI.
 
-- [ ] **6.7** Implement Start button handler:
+- [x] **6.7** Implement Start button handler:
   Validate group is detected. Send `START_RECORDING { groupId, groupName }` to background.
   On confirmation: re-render popup to recording state.
 
-- [ ] **6.8** Implement Stop button handler:
+- [x] **6.8** Implement Stop button handler:
   Send `STOP_RECORDING` to background.
   On confirmation: re-render popup to stopped state.
 
-- [ ] **6.9** Implement "Open Record Viewer" link:
+- [x] **6.9** Implement "Open Record Viewer" link:
   `chrome.tabs.create({ url: chrome.runtime.getURL('viewer/viewer.html') })`
 
-- [ ] **6.10** Handle `AUTO_STOPPED` notification from background (if popup is open):
+- [x] **6.10** Handle `AUTO_STOPPED` notification from background (if popup is open):
   Re-render to stopped state. Optionally show a brief notice "Recording stopped — chat changed."
 
 ---

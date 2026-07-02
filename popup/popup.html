@@ -7,10 +7,53 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div id="app">
-    <h1>Telegram Recorder</h1>
-    <p>Loading…</p>
-  </div>
+  <main id="popup" class="popup">
+    <header class="popup-header">
+      <h1>Telegram Recorder</h1>
+    </header>
+
+    <!-- Page validation notice -->
+    <section id="notice-section" class="section hidden">
+      <p id="notice-text" class="notice"></p>
+      <button id="switch-web-k" class="button hidden">Switch to Telegram Web K</button>
+    </section>
+
+    <!-- Group info -->
+    <section id="group-section" class="section hidden">
+      <div class="info-row">
+        <span class="info-label">Group</span>
+        <span id="group-name" class="info-value">No group open</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">ID</span>
+        <span id="group-id" class="info-value">—</span>
+      </div>
+    </section>
+
+    <!-- Recording status -->
+    <section id="status-section" class="section hidden">
+      <div class="info-row">
+        <span class="info-label">Status</span>
+        <span id="status-value" class="info-value">
+          <span id="status-dot" class="status-dot"></span>
+          <span id="status-text">Stopped</span>
+        </span>
+      </div>
+      <div id="session-row" class="info-row hidden">
+        <span class="info-label">Session</span>
+        <span id="session-id" class="info-value">—</span>
+      </div>
+      <p id="auto-stop-notice" class="auto-stop-notice hidden">Recording stopped — chat changed.</p>
+    </section>
+
+    <!-- Actions -->
+    <section id="actions-section" class="section actions">
+      <button id="start-button" class="button button-primary hidden">▶ Start Recording</button>
+      <button id="stop-button" class="button button-danger hidden">■ Stop Recording</button>
+      <button id="viewer-button" class="button button-secondary">Open Record Viewer ↗</button>
+    </section>
+  </main>
+
   <script src="../shared/messages.js"></script>
   <script src="popup.js"></script>
 </body>
