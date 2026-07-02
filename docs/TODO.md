@@ -238,21 +238,22 @@
 > [`PLAN.md §10` — File System Layout](PLAN.md#10-file-system-layout),
 > [`PLAN.md §11.1` — Start Recording Flow](PLAN.md#11-software-flows)
 
-- [ ] **5.1** Implement `SAVE_FILES` handler in `background/service-worker.js`:
+- [x] **5.1** Implement `SAVE_FILES` handler in `background/service-worker.js`:
   Accepts `{ messageData, croppedDataUrl }`.
   Calls `chrome.downloads.download()` twice:
   - PNG: `filename: telegram-recorder/${groupId}/${messageId}.png`, `url: croppedDataUrl`
   - JSON: `filename: telegram-recorder/${groupId}/${messageId}.json`,
     `url: jsonDataUrl(messageData)`
+  <!-- PNG is skipped when `croppedDataUrl` is null (screenshot failure / Phase 10.6). -->
 
-- [ ] **5.2** Implement manifest save in `START_RECORDING` handler in `service-worker.js`:
+- [x] **5.2** Implement manifest save in `START_RECORDING` handler in `service-worker.js`:
   Construct manifest object per [`PLAN.md §9.1`](PLAN.md#9-data-schemas).
   Save as `telegram-recorder/${groupId}/manifest-${sessionId}.json` via `chrome.downloads`.
 
-- [ ] **5.3** Implement `jsonDataUrl(obj)` helper:
+- [x] **5.3** Implement `jsonDataUrl(obj)` helper:
   `'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(obj, null, 2))`
 
-- [ ] **5.4** Handle `chrome.downloads` errors:
+- [x] **5.4** Handle `chrome.downloads` errors:
   Wrap all `chrome.downloads.download()` calls. On error, log to console with message ID.
   Do not retry — failed saves are silently skipped (no crash, no state corruption).
 
