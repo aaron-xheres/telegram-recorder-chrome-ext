@@ -103,8 +103,8 @@
       return hash;
     }
 
-    // Fallback for public group/channel URLs like /k/@groupname.
-    const usernameMatch = location.pathname.match(/@([a-zA-Z0-9_]+)/);
+    // Fallback for public group/channel URLs like /k/@groupname or /k/#@groupname.
+    const usernameMatch = (location.pathname + location.hash).match(/@([a-zA-Z0-9_]+)/);
     if (usernameMatch) {
       return '@' + usernameMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
     }
