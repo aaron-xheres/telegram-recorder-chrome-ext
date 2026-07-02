@@ -398,7 +398,7 @@
 
 > Ref: [`PLAN.md §13.5` — CSV Export](PLAN.md#13-viewer-page--specification)
 
-- [ ] **9.1** Implement `buildCsvRows(visibleMessages, sessionsMap)`:
+- [x] **9.1** Implement `buildCsvRows(visibleMessages, sessionsMap)`:
   Map each visible message to a CSV row using the column mapping in
   [`PLAN.md §13.5`](PLAN.md#13-viewer-page--specification).
   - `links`: join with `|`
@@ -406,18 +406,18 @@
   - `content`: escape internal quotes (`"` → `""`); wrap entire field in `"`
   - `screenshot_path`: `${groupId}/${screenshotFile}` (relative to `telegram-recorder/`)
 
-- [ ] **9.2** Prepend comment rows to CSV output:
+- [x] **9.2** Prepend comment rows to CSV output:
   ```
   # Screenshots are local files. Resolve paths relative to your telegram-recorder/ folder.
   # Blob URLs in 'images' column are ephemeral and expire when the recording tab is closed.
   ```
 
-- [ ] **9.3** Implement CSV download trigger:
+- [x] **9.3** Implement CSV download trigger:
   `new Blob([csvString], { type: 'text/csv;charset=utf-8;' })`
   → `URL.createObjectURL(blob)` → programmatic `<a download="telegram-recorder-export.csv">` click.
   Revoke blob URL after click.
 
-- [ ] **9.4** Wire "Export CSV" button to export only currently visible rows
+- [x] **9.4** Wire "Export CSV" button to export only currently visible rows
   (respects active session filter + name search). Disable button if no folder is loaded.
 
 ---
