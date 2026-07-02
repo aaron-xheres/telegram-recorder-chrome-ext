@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Telegram Message Recorder",
+  "version": "1.0.0",
+  "description": "Record Telegram Web K messages and screenshots locally.",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "downloads",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://web.telegram.org/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Telegram Recorder"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://web.telegram.org/k/*"],
+      "js": [
+        "shared/messages.js",
+        "content/extractor.js",
+        "content/screenshot.js",
+        "content/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["viewer/*", "popup/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
