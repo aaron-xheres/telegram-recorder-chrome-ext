@@ -149,6 +149,12 @@ function getVisibleMessages() {
   return messages.filter(record => {
     if (!selectedSessionIds.has(record.sessionId)) return false;
     if (!search) return true;
+
+    // Special keyword: filter anonymous admin posts (posterName null, posterId == groupId).
+    if (search === 'admin' || search === '—') {
+      return record.posterName == null && record.posterId === record.groupId;
+    }
+
     const name = record.posterName ?? '';
     return name.toLowerCase().includes(search);
   });
