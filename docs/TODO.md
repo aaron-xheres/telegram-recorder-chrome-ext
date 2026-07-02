@@ -486,12 +486,20 @@
 
 > Check these off only after **all** phase tasks above are completed and passing.
 
-- [ ] All Phase 1 research findings documented (comments in tasks 1.1, 1.5, 1.6)
+- [x] All Phase 1 research findings documented (comments in tasks 1.1, 1.5, 1.6)
 - [ ] Extension loads in Chrome without manifest errors
+  <!-- BLOCKED: no Chrome browser available in this environment; manifest JSON and JS syntax validated via bun build. -->
 - [ ] Recording start/stop cycle works end-to-end
+  <!-- BLOCKED: cannot verify without live Telegram Web K session. -->
 - [ ] Files save to correct paths in `Downloads/telegram-recorder/`
+  <!-- BLOCKED: cannot verify without live Telegram Web K session. -->
 - [ ] Viewer loads multi-group data correctly
+  <!-- BLOCKED: cannot verify without sample recorded data. -->
 - [ ] Session filter accordion works
+  <!-- BLOCKED: cannot verify without sample recorded data. -->
 - [ ] CSV export produces valid, openable file
+  <!-- BLOCKED: cannot verify without sample recorded data. -->
 - [ ] All edge cases in task 10.9 verified
+  <!-- BLOCKED: no live Telegram Web K access. -->
 - [ ] No console errors during normal recording and viewing session
+  <!-- BLOCKED: cannot verify without live Telegram Web K session. -->
