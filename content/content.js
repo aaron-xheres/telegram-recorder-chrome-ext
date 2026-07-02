@@ -84,15 +84,29 @@
    * @returns {string|null}
    */
   function getGroupId() {
+    // Prefer the bubbles container's data-peer-id when available.
     const bubbles = document.querySelector(BUBBLES_SELECTOR);
     if (bubbles?.dataset.peerId) {
       return bubbles.dataset.peerId;
+    }
+
+    // Look for any other chat-level peer-id element.
+    const chatPeer = document.querySelector('[data-peer-id]');
+    const chatPeerId = chatPeer?.dataset.peerId;
+    if (chatPeerId && /^-?\d+$/.test(chatPeerId)) {
+      return chatPeerId;
     }
 
     // Fallback: Telegram Web K puts the current chat peer ID in the URL hash.
     const hash = location.hash?.replace(/^#/, '');
     if (hash && /^-?\d+$/.test(hash)) {
       return hash;
+    }
+
+    // Fallback for public group/channel URLs like /k/@groupname.
+    const usernameMatch = location.pathname.match(/@([a-zA-Z0-9_]+)/);
+    if (usernameMatch) {
+      return '@' + usernameMatch[1];
     }
 
     return null;
