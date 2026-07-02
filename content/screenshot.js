@@ -125,18 +125,19 @@ async function captureScreenshot(bubble) {
 
     const dpr = window.devicePixelRatio || 1;
 
-    // Capture can be flaky when the window/tab is not fully focused or still painting.
-    // Retry a few times before giving up; JSON is still saved on failure.
-    let response = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    // The service worker focuses the tab and retries the capture internally.
+    // We only retry here if the message channel itself is temporarily unavailable.
+    let response;
+    try {
       response = await chrome.runtime.sendMessage({ type: SCREENSHOT_MSG.CAPTURE_TAB });
-      if (response?.ok && response.fullDataUrl) break;
-      console.warn('[TelegramRecorder] CAPTURE_TAB attempt', attempt, 'failed', response);
-      if (attempt < 3) await sleep(200);
+    } catch (err) {
+      console.warn('[TelegramRecorder] CAPTURE_TAB message failed, retrying once', err);
+      await sleep(200);
+      response = await chrome.runtime.sendMessage({ type: SCREENSHOT_MSG.CAPTURE_TAB });
     }
 
     if (!response || !response.ok || !response.fullDataUrl) {
-      console.error('[TelegramRecorder] CAPTURE_TAB failed after retries', response);
+      console.error('[TelegramRecorder] CAPTURE_TAB failed', response);
       return null;
     }
 
