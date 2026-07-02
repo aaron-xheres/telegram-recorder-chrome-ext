@@ -148,6 +148,9 @@
 
       if (!croppedDataUrl) {
         messageData.screenshotFile = null;
+        console.warn('[TelegramRecorder] screenshot failed or skipped for message', messageData?.messageId, '- JSON will still be saved');
+      } else {
+        console.log('[TelegramRecorder] captured screenshot for message', messageData?.messageId);
       }
 
       await chrome.runtime.sendMessage({
@@ -155,6 +158,7 @@
         messageData,
         croppedDataUrl
       });
+      console.log('[TelegramRecorder] saved message', messageData?.messageId);
     } catch (err) {
       console.error('[TelegramRecorder] processNext failed for message', messageData?.messageId, err);
     }
@@ -170,19 +174,26 @@
    * @param {MutationRecord[]} mutations
    */
   function handleMutations(mutations) {
+    let detected = 0;
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
         if (node.classList.contains('bubble')) {
           processBubbleNode(node);
+          detected++;
           continue;
         }
 
         if (node.querySelectorAll) {
-          node.querySelectorAll('.bubble').forEach(processBubbleNode);
+          const bubbles = node.querySelectorAll('.bubble');
+          bubbles.forEach(processBubbleNode);
+          detected += bubbles.length;
         }
       }
+    }
+    if (detected > 0) {
+      console.log('[TelegramRecorder] mutation detected', detected, 'bubble(s)');
     }
   }
 
@@ -191,12 +202,22 @@
    */
   function processBubbleNode(bubble) {
     const mid = bubble.dataset.mid;
-    if (!mid) return;
-    if (baselineSet.has(mid)) return;
-    if (recordedSet.has(mid)) return;
+    if (!mid) {
+      console.log('[TelegramRecorder] skipped bubble without data-mid (system/service message)');
+      return;
+    }
+    if (baselineSet.has(mid)) {
+      console.log('[TelegramRecorder] skipped baseline message', mid);
+      return;
+    }
+    if (recordedSet.has(mid)) {
+      console.log('[TelegramRecorder] skipped already-recorded message', mid);
+      return;
+    }
 
     recordedSet.add(mid);
     const messageData = extract(bubble, currentSessionId);
+    console.log('[TelegramRecorder] queued new message', mid, messageData.posterName);
     enqueue(bubble, messageData);
   }
 
