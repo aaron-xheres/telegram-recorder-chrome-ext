@@ -973,30 +973,46 @@ Export applies to currently **visible rows** (respects session filter + name sea
 
 ## 14. State Management
 
+The extension supports **multiple concurrent recording sessions** across tabs/windows,
+with one session per tab. A group-level guard prevents starting two recordings for the
+same `groupId` at the same time.
+
 ### `chrome.storage.local` (persists across browser restarts)
 
 | Key | Type | Description |
 |---|---|---|
-| `recording` | `boolean` | Current recording state |
-| `currentSessionId` | `string \| null` | Active session unix-ms timestamp |
-| `currentGroupId` | `string \| null` | Active group peer ID |
-| `currentGroupName` | `string \| null` | Active group name |
+| `activeSessions` | `Array<ActiveSession>` | List of active sessions (one per tab) |
+
+```ts
+interface ActiveSession {
+  tabId: number;
+  sessionId: string;   // unix-ms timestamp
+  groupId: string;     // group peer ID or @username
+  groupName: string | null;
+}
+```
 
 ### `chrome.storage.session` (cleared on browser close)
 
-| Key | Type | Description |
+No longer used for service-worker state. Each content script keeps its own
+`recordedSet` in memory.
+
+### Service Worker In-Memory
+
+| Variable | Type | Description |
 |---|---|---|
-| `recordedSet` | `string[]` | Message IDs recorded this session (collision guard) |
+| `activeSessions` | `Map<number, ActiveSession>` | Active sessions keyed by tab ID |
 
 On service worker wake (MV3 service workers may terminate and restart):
-- Rehydrate `recordedSet` from `chrome.storage.session`
-- Rehydrate `recording` / `sessionId` from `chrome.storage.local`
+- Rehydrate `activeSessions` from `chrome.storage.local`
+- Content scripts ask for their own session via `GET_SESSION` and resume if present
 
 ### Content Script In-Memory
 
 | Variable | Type | Description |
 |---|---|---|
 | `baselineSet` | `Set<string>` | `data-mid` values present at START |
+| `recordedSet` | `Set<string>` | `data-mid` values processed in this session |
 | `observer` | `MutationObserver \| null` | Active observer instance |
 | `queue` | `Array<QueueItem>` | Pending screenshot/save items |
 | `isProcessing` | `boolean` | Queue lock flag |
