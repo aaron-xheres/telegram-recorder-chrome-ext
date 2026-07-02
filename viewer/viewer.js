@@ -6,8 +6,6 @@ const els = {
   openFolder: document.getElementById('open-folder'),
   exportCsv: document.getElementById('export-csv'),
   nameSearch: document.getElementById('name-search'),
-  folderInfo: document.getElementById('folder-info'),
-  folderName: document.getElementById('folder-name'),
   groupInfo: document.getElementById('group-info'),
   groupList: document.getElementById('group-list'),
   sessionsSection: document.getElementById('sessions-section'),
@@ -68,19 +66,8 @@ async function loadDirectory(root) {
   screenshotBlobUrls = new Map();
   selectedSessionIds = new Set();
 
-  let hasSubdirectories = false;
-  for await (const [name, entry] of root.entries()) {
-    if (entry.kind !== 'dir') continue;
-    hasSubdirectories = true;
-    const groupId = name;
-    await loadGroupDirectory(entry, groupId);
-  }
-
-  // Fallback: if the user opened a single group folder (e.g. -5491281397)
-  // instead of the telegram-recorder/ root, treat that folder as one group.
-  if (!hasSubdirectories) {
-    await loadGroupDirectory(root, root.name);
-  }
+  // Viewer expects a single group folder, not the telegram-recorder/ root.
+  await loadGroupDirectory(root, root.name);
 
   selectedSessionIds = new Set(sessions.keys());
 
@@ -90,8 +77,6 @@ async function loadDirectory(root) {
   renderFilters();
   renderTable();
 
-  els.folderName.textContent = root.name;
-  els.folderInfo.classList.remove('hidden');
   els.emptyState.classList.add('hidden');
   els.tableContainer.classList.remove('hidden');
   els.exportCsv.disabled = messages.length === 0;
@@ -262,16 +247,29 @@ function renderGroupInfo() {
     const groupName = session?.groupName ?? MISSING_FIELD;
 
     const li = document.createElement('li');
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'group-name';
-    nameSpan.textContent = groupName;
 
-    const idSpan = document.createElement('span');
-    idSpan.className = 'group-id';
-    idSpan.textContent = groupId;
+    const nameRow = document.createElement('div');
+    const nameLabel = document.createElement('span');
+    nameLabel.className = 'label';
+    nameLabel.textContent = 'Group Name:';
+    const nameValue = document.createElement('span');
+    nameValue.className = 'group-name';
+    nameValue.textContent = groupName;
+    nameRow.appendChild(nameLabel);
+    nameRow.appendChild(nameValue);
 
-    li.appendChild(nameSpan);
-    li.appendChild(idSpan);
+    const idRow = document.createElement('div');
+    const idLabel = document.createElement('span');
+    idLabel.className = 'label';
+    idLabel.textContent = 'Group ID:';
+    const idValue = document.createElement('span');
+    idValue.className = 'group-id';
+    idValue.textContent = groupId;
+    idRow.appendChild(idLabel);
+    idRow.appendChild(idValue);
+
+    li.appendChild(nameRow);
+    li.appendChild(idRow);
     list.appendChild(li);
   }
 
