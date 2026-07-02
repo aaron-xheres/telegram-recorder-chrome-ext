@@ -134,75 +134,77 @@
 
 ### 3a — `content/extractor.js`
 
-- [ ] **3.1** Implement `resolveSenderPeerId(bubble)`:
+- [x] **3.1** Implement `resolveSenderPeerId(bubble)`:
   Walk up `.bubble` → parent `.bubbles-group` → `.bubbles-group-avatar[data-peer-id]`.
   Return the avatar's `data-peer-id` string, or `null` if not found.
 
-- [ ] **3.2** Implement `resolveSenderName(bubble)`:
+- [x] **3.2** Implement `resolveSenderName(bubble)`:
   Query `span.peer-title` within the bubble.
   Return `textContent.trim()` or `null` if element not present.
 
-- [ ] **3.3** Implement `isAnonymousSender(posterId, groupId)`:
+- [x] **3.3** Implement `isAnonymousSender(posterId, groupId)`:
   Returns `true` if `posterId === groupId` or `posterId` is negative.
   When `true`, caller sets `posterName = null`.
 
-- [ ] **3.4** Implement `extractText(bubble)`:
+- [x] **3.4** Implement `extractText(bubble)`:
   Clone `.translatable-message`, remove all `img.emoji` and `img.emoji-image` from clone,
   return `clone.textContent.trim()`. Return `null` if `.translatable-message` not found.
 
-- [ ] **3.5** Implement `extractLinks(bubble)`:
+- [x] **3.5** Implement `extractLinks(bubble)`:
   Query all `a.anchor-url` in `.translatable-message`.
   Collect `anchor.href` (absolute URL). Deduplicate with `!links.includes(url)` guard.
   Return `string[]`.
 
-- [ ] **3.6** Implement `extractMediaImages(bubble)`:
+- [x] **3.6** Implement `extractMediaImages(bubble)`:
   Query `img.media-photo` within `.attachment` and `.media-container` containers.
   Exclude any that also have class `emoji` or `emoji-image`.
   Collect `img.src` (blob URLs). Return `string[]`.
 
-- [ ] **3.7** Implement `extract(bubble, sessionId)`:
+- [x] **3.7** Implement `extract(bubble, sessionId)`:
   Orchestrate all extraction functions. Return full message data object matching
   [`PLAN.md §9.2`](PLAN.md#9-data-schemas) schema. Set `screenshotFile` to `${messageId}.png`.
 
 ### 3b — `content/content.js`
 
-- [ ] **3.8** On script load, read recording state from `chrome.storage.local`. If `recording`
+- [x] **3.8** On script load, read recording state from `chrome.storage.local`. If `recording`
   is `true` (service worker was restarted mid-session), reinitialise observer automatically.
 
-- [ ] **3.9** Implement `buildBaselineSet()`:
+- [x] **3.9** Implement `buildBaselineSet()`:
   Query all `.bubble[data-mid]` currently in DOM. Return a `Set<string>` of their `data-mid`
   values.
 
-- [ ] **3.10** Implement `getGroupId()`:
+- [x] **3.10** Implement `getGroupId()`:
   Read `data-peer-id` from `.bubbles` container. Return string or `null`.
 
-- [ ] **3.11** Implement `getGroupName()`:
+- [x] **3.11** Implement `getGroupName()`:
   Read group name using the selector confirmed in task **1.1**. Return string or `null`.
 
-- [ ] **3.12** Implement FIFO queue as described in [`PLAN.md §8`](PLAN.md#8-rapid-message-queue):
+- [x] **3.12** Implement FIFO queue as described in [`PLAN.md §8`](PLAN.md#8-rapid-message-queue):
   `queue`, `isProcessing`, `enqueue(bubble, messageData)`, `processNext()`.
   `processNext()` calls `screenshot.js` and then `SAVE_FILES` to background, then recurses.
 
-- [ ] **3.13** Implement `handleMutations(mutations)`:
+- [x] **3.13** Implement `handleMutations(mutations)`:
   Iterate `addedNodes`. Handle Scenario A (new `.bubbles-group`) and Scenario B (new `.bubble`
   directly). Per bubble: run all collision guards (missing `data-mid`, `baselineSet`,
   `recordedSet`). If passes: extract data immediately, add to `recordedSet`, enqueue.
 
-- [ ] **3.14** Implement `startRecording(sessionId)` handler:
+- [x] **3.14** Implement `startRecording(sessionId)` handler:
   Build `baselineSet`, attach `MutationObserver` to `.bubbles` with
   `{ childList: true, subtree: true }`.
 
-- [ ] **3.15** Implement `stopRecording()` handler:
+- [x] **3.15** Implement `stopRecording()` handler:
   Call `observer.disconnect()`, clear queue, reset `isProcessing`, clear `baselineSet`.
 
-- [ ] **3.16** Implement `chrome.runtime.onMessage` listener in content script for messages:
+- [x] **3.16** Implement `chrome.runtime.onMessage` listener in content script for messages:
   `START_RECORDING`, `STOP_RECORDING`, `GET_GROUP_INFO`.
   `GET_GROUP_INFO` responds with `{ groupId, groupName }`.
 
-- [ ] **3.17** Add chat navigation auto-stop listener:
+- [x] **3.17** Add chat navigation auto-stop listener:
   Listen for the event confirmed in task **1.6** on `window`.
   On fire: compare new URL's group hash/ID to `currentGroupId`. If changed and recording,
   call `stopRecording()` and send `AUTO_STOPPED` to background.
+  <!-- Added popstate + hashchange listeners plus URL polling fallback because live event
+       validation was blocked in Phase 1. -->
 
 ---
 
