@@ -53,13 +53,52 @@ function cropToRect(fullDataUrl, rect, dpr) {
 }
 
 /**
+ * Compute the intersection of a bubble rect with the current viewport.
+ * Long messages may be taller than the viewport, so we clip to what is actually
+ * visible instead of creating a huge transparent screenshot.
+ * @param {DOMRect} rect
+ * @returns {DOMRect|null}
+ */
+function intersectWithViewport(rect) {
+  const viewport = {
+    left: 0,
+    top: 0,
+    right: window.innerWidth,
+    bottom: window.innerHeight
+  };
+
+  const left = Math.max(rect.left, viewport.left);
+  const top = Math.max(rect.top, viewport.top);
+  const right = Math.min(rect.right, viewport.right);
+  const bottom = Math.min(rect.bottom, viewport.bottom);
+
+  if (right <= left || bottom <= top) {
+    return null;
+  }
+
+  return new DOMRect(left, top, right - left, bottom - top);
+}
+
+/**
  * Scroll a bubble into view, capture the tab, and return a cropped data URL.
+ * If the bubble is taller than the viewport, scroll to its top and capture only
+ * the visible portion to avoid a failed/transparent screenshot.
  * @param {Element} bubble
  * @returns {Promise<string|null>}
  */
-  async function captureScreenshot(bubble) {
+async function captureScreenshot(bubble) {
   try {
-    bubble.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const initialRect = bubble.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const bubbleTallerThanViewport = initialRect.height > viewportHeight;
+
+    if (bubbleTallerThanViewport) {
+      console.warn('[TelegramRecorder] bubble is taller than viewport; capturing visible top portion');
+      bubble.scrollIntoView({ block: 'start', behavior: 'instant' });
+    } else {
+      bubble.scrollIntoView({ block: 'center', behavior: 'instant' });
+    }
+
     // Give Telegram a moment to finish layout/paint, then wait for the next frame
     // so the scroll position is reflected before capture.
     await sleep(CAPTURE_WAIT_MS);
@@ -69,6 +108,19 @@ function cropToRect(fullDataUrl, rect, dpr) {
     if (rect.width <= 0 || rect.height <= 0) {
       console.warn('[TelegramRecorder] bubble has zero size; skipping screenshot');
       return null;
+    }
+
+    const visibleRect = intersectWithViewport(rect);
+    if (!visibleRect) {
+      console.warn('[TelegramRecorder] bubble is outside viewport; skipping screenshot');
+      return null;
+    }
+
+    if (visibleRect.width < rect.width || visibleRect.height < rect.height) {
+      console.warn('[TelegramRecorder] bubble clipped to viewport', {
+        full: { width: rect.width, height: rect.height },
+        visible: { width: visibleRect.width, height: visibleRect.height }
+      });
     }
 
     const dpr = window.devicePixelRatio || 1;
@@ -88,7 +140,7 @@ function cropToRect(fullDataUrl, rect, dpr) {
       return null;
     }
 
-    return await cropToRect(response.fullDataUrl, rect, dpr);
+    return await cropToRect(response.fullDataUrl, visibleRect, dpr);
   } catch (err) {
     console.error('[TelegramRecorder] captureScreenshot failed', err);
     return null;

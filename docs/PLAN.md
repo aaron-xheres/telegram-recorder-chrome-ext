@@ -498,24 +498,27 @@ message text, not standalone media attachments.
 ### Process (per message)
 
 ```
-1. element.scrollIntoView({ block: 'center', behavior: 'instant' })
-2. await 150ms  — allow repaint to settle
-3. await requestAnimationFrame  — ensure scroll position is reflected
-4. rect = element.getBoundingClientRect()
-5. dpr = window.devicePixelRatio  — account for retina displays
+1. initialRect = element.getBoundingClientRect()
+2. If initialRect.height > viewport height → element.scrollIntoView({ block: 'start' })
+   else → element.scrollIntoView({ block: 'center' })
+3. await 150ms  — allow repaint to settle
+4. await requestAnimationFrame  — ensure scroll position is reflected
+5. rect = element.getBoundingClientRect()
+6. visibleRect = intersection of rect with the current viewport
+7. dpr = window.devicePixelRatio  — account for retina displays
 
-6. content.js → background: { type: 'CAPTURE_TAB' }
-7. background: chrome.tabs.captureVisibleTab({ format: 'png' }) with 3 retries
+8. content.js → background: { type: 'CAPTURE_TAB' }
+9. background: chrome.tabs.captureVisibleTab({ format: 'png' }) with 3 retries
    → fullDataUrl (entire visible tab as PNG base64)
-8. background → content.js: { fullDataUrl }
-9. content.js retries the message up to 3 times if fullDataUrl is missing
+10. background → content.js: { fullDataUrl }
+11. content.js retries the message up to 3 times if fullDataUrl is missing
 
-10. content.js: create <canvas> width=(rect.width × dpr), height=(rect.height × dpr)
-11. img.onload: ctx.drawImage(fullImg, -(rect.left × dpr), -(rect.top × dpr))
-12. croppedDataUrl = canvas.toDataURL('image/png')
+12. content.js: create <canvas> width=(visibleRect.width × dpr), height=(visibleRect.height × dpr)
+13. img.onload: ctx.drawImage(fullImg, -(visibleRect.left × dpr), -(visibleRect.top × dpr))
+14. croppedDataUrl = canvas.toDataURL('image/png')
 
-13. content.js → background: { type: 'SAVE_FILES', messageData, croppedDataUrl }
-14. background: chrome.downloads.download() × 2
+15. content.js → background: { type: 'SAVE_FILES', messageData, croppedDataUrl }
+16. background: chrome.downloads.download() × 2
       filename: `telegram-recorder/{groupId}/{messageId}.png`
       filename: `telegram-recorder/{groupId}/{messageId}.json`
 ```
@@ -530,6 +533,9 @@ message text, not standalone media attachments.
   delays, because `captureVisibleTab` can occasionally return an empty result while the page
   is still painting or the window focus is transitioning. JSON is still saved if all retries
   fail.
+- Messages taller than the viewport are scrolled to the top and clipped to the visible area.
+  This avoids transparent/failed screenshots; very long messages are therefore captured as
+  their top portion only.
 - Canvas crop uses `dpr` to correctly handle retina/HiDPI screens — without this, crops would
   be offset by a 2× factor on Retina displays.
 
