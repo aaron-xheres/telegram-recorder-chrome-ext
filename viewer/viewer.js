@@ -151,7 +151,7 @@ function getVisibleMessages() {
     if (!search) return true;
 
     // Special keyword: filter anonymous admin posts (posterName null, posterId == groupId).
-    if (search === 'admin' || search === '—') {
+    if (search === 'admin' || search === '—' || search === '-') {
       return record.posterName == null && record.posterId === record.groupId;
     }
 
