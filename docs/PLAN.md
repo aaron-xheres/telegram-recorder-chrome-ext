@@ -192,6 +192,50 @@ and `.peer-title` elements are absent. The avatar's `data-peer-id` equals the gr
 
 Real users always have `.peer-title` rendered on every bubble regardless of consecutiveness.
 
+### Public Groups / Forwarded Channel Posts
+
+In public groups and channels the sender metadata may live inside the bubble itself rather
+than the `bubbles-group` header, especially for forwarded channel posts:
+
+```html
+<div class="bubble-content">
+
+  <!-- Forwarded post: original sender rendered inside the bubble -->
+  <div class="name floating-part" dir="auto">
+    <span class="i18n bubble-name-forwarded">Forwarded from
+      <div class="avatar bubble-name-forwarded-avatar"
+           data-peer-id="-3727471819">
+        <img class="avatar-photo" src="blob:...">
+      </div>
+      <span class="peer-title" data-peer-id="-3727471819">X CREDITS</span>
+    </span>
+  </div>
+
+  <!-- Media -->
+  <div class="attachment media-container">
+    <img class="media-photo" src="blob:...">
+  </div>
+
+  <!-- Text with custom emoji / stickers / hashtags / mentions -->
+  <div class="message spoilers-container">
+    <span class="translatable-message">
+      <custom-emoji-element class="custom-emoji media-sticker-wrapper"
+                            data-sticker-emoji="✨">...</custom-emoji-element>
+      Loan details
+      <a class="mention" href="tg://resolve?domain=i8tommy">@i8tommy</a>
+      <a class="anchor-hashtag" href="tg://search_hashtag?hashtag=sgloan">#sgloan</a>
+    </span>
+  </div>
+
+</div>
+```
+
+Key differences:
+- Sender avatar may be `.bubble-name-forwarded-avatar[data-peer-id]` inside the bubble.
+- Sender name is `.bubble-name-forwarded .peer-title`.
+- Custom emoji/stickers use `<custom-emoji-element>` and `<custom-emoji-renderer-element>`.
+- Hashtags use `a.anchor-hashtag`; mentions use `a.mention`.
+
 ### System / Service Messages
 
 System messages (join events, pinned message notifications, etc.) appear as DOM additions to
@@ -205,21 +249,27 @@ the messages container but reliably lack `data-mid`. Absence of `data-mid` → s
 
 ```
 Step 1 — Avatar peer ID (sender's effective peer ID):
-  Walk up: .bubble → parent .bubbles-group → .bubbles-group-avatar[data-peer-id]
+  Try bubble-level avatar first:
+    bubble.querySelector('.avatar[data-peer-id], .bubble-name-forwarded-avatar[data-peer-id]')
+  Fallback: walk up to parent .bubbles-group → .bubbles-group-avatar[data-peer-id]
   → avatarPeerId = avatar.dataset.peerId
 
 Step 2 — Group peer ID (for comparison):
   groupId = bubble.dataset.peerId
 
 Step 3 — Determine sender type:
-  if (avatarPeerId === groupId || avatarPeerId is negative):
-    → Anonymous/group post
-    → posterId = avatarPeerId  (group peer ID — accurate, reflects post-as-group)
+  if (avatarPeerId === groupId):
+    → Anonymous/group post (admin posting as group, or channel post-as-group)
+    → posterId = groupId
+    → posterName = null
+  else if (avatarPeerId is null):
+    → Anonymous/group post (no sender resolvable)
+    → posterId = groupId
     → posterName = null
   else:
-    → Real user
+    → Real sender (user, bot, or channel)
     → posterId = avatarPeerId
-    → posterName = bubble.querySelector('span.peer-title')?.textContent.trim() ?? null
+    → posterName = bubble.querySelector('.peer-title')?.textContent.trim() ?? null
 ```
 
 ### Outcomes
@@ -227,6 +277,7 @@ Step 3 — Determine sender type:
 | Scenario | `posterId` | `posterName` |
 |---|---|---|
 | Real user | User peer ID (positive int) | Display name string |
+| Forwarded channel / bot / public group sender | Channel/bot peer ID (negative int) | Display name string |
 | Anonymous admin / group post | Group peer ID (negative int) | `null` |
 | No avatar resolvable (edge case) | `null` | `null` |
 
@@ -289,14 +340,17 @@ function handleMutations(mutations) {
 
 ## 6. Content Extraction Rules
 
-### 6.1 Text Content — Emoji Stripping
+### 6.1 Text Content — Emoji / Sticker Stripping
 
 Emoji are rendered as `<img class="emoji emoji-image" alt="💰">` inside `.translatable-message`.
-These must be removed before reading text. The `alt` unicode char is NOT preserved.
+Public groups and channels also use `<custom-emoji-element>` and `<custom-emoji-renderer-element>`
+for stickers and custom emoji. All of these must be removed before reading text. The `alt`
+unicode char and `data-sticker-emoji` attribute are NOT preserved.
 
 ```
 clone = translatable.cloneNode(true)
-clone.querySelectorAll('img.emoji, img.emoji-image').forEach(el => el.remove())
+clone.querySelectorAll('img.emoji, img.emoji-image, custom-emoji-element, custom-emoji-renderer-element')
+  .forEach(el => el.remove())
 content = clone.textContent.trim()
 // Browser decodes HTML entities (&amp; → &) automatically via textContent
 ```
@@ -304,11 +358,12 @@ content = clone.textContent.trim()
 ### 6.2 Links — Deduplicated URL Array
 
 Link text is preserved in the `content` string (via `textContent`).
-Only the `href` values are separately extracted into `links: string[]`.
+The `href` values from external URLs, mentions, and hashtags are separately extracted into
+`links: string[]`.
 
 ```
 links = []
-translatable.querySelectorAll('a.anchor-url').forEach(a => {
+translatable.querySelectorAll('a.anchor-url, a.mention, a.anchor-hashtag').forEach(a => {
   url = a.href  // browser-resolved absolute URL
   if (!links.includes(url)) links.push(url)
 })
@@ -320,14 +375,16 @@ translatable.querySelectorAll('a.anchor-url').forEach(a => {
 images = []
 bubble.querySelectorAll('.attachment img.media-photo, .media-container img.media-photo')
   .forEach(img => {
-    if (!img.classList.contains('emoji') && !img.classList.contains('emoji-image')) {
-      images.push(img.src)  // blob: URL
-    }
+    if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return
+    if (img.closest('custom-emoji-element, custom-emoji-renderer-element')) return
+    images.push(img.src)  // blob: URL
   })
 ```
 
 Blob URLs are ephemeral (expire with the tab session). They are stored in the JSON record for
 reference but will be dead after the tab is closed. The screenshot captures media visually.
+Stickers and custom emoji images are excluded from `images[]` because they are part of the
+message text, not standalone media attachments.
 
 ### 6.4 Complete Extraction Object
 
