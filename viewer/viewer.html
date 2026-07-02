@@ -13,15 +13,16 @@
       <div class="toolbar">
         <button id="open-folder" class="button">Open Folder</button>
         <button id="export-csv" class="button" disabled>Export CSV</button>
-        <div class="search-box">
-          <label for="name-search">Search:</label>
-          <input id="name-search" type="search" placeholder="Poster name…" autocomplete="off">
-        </div>
       </div>
     </header>
 
     <section id="folder-info" class="folder-info hidden">
       <span id="folder-name">No folder loaded</span>
+    </section>
+
+    <section id="group-info" class="card hidden">
+      <h2>Groups</h2>
+      <ul id="group-list" class="group-list"></ul>
     </section>
 
     <section id="sessions-section" class="sessions-section hidden">
@@ -35,6 +36,21 @@
         </div>
         <ul id="sessions-list" class="sessions-list"></ul>
       </div>
+    </section>
+
+    <section id="filters-section" class="card hidden">
+      <h2>Filters</h2>
+      <div class="filter-row">
+        <label for="name-search">Poster name:</label>
+        <input id="name-search" type="search" placeholder="Search…" autocomplete="off">
+      </div>
+    </section>
+
+    <section id="faq-section" class="card">
+      <h2>Quick FAQ</h2>
+      <ul class="faq-list">
+        <li><strong>Empty poster name</strong> or a <strong>poster ID identical to the group ID</strong> means the message was posted by the group admin anonymously (Telegram’s “hide name” / post-as-group feature).</li>
+      </ul>
     </section>
 
     <section id="table-section" class="table-section">

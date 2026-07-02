@@ -8,12 +8,15 @@ const els = {
   nameSearch: document.getElementById('name-search'),
   folderInfo: document.getElementById('folder-info'),
   folderName: document.getElementById('folder-name'),
+  groupInfo: document.getElementById('group-info'),
+  groupList: document.getElementById('group-list'),
   sessionsSection: document.getElementById('sessions-section'),
   sessionsToggle: document.getElementById('sessions-toggle'),
   sessionsPanel: document.getElementById('sessions-panel'),
   sessionsList: document.getElementById('sessions-list'),
   selectAllSessions: document.getElementById('select-all-sessions'),
   deselectAllSessions: document.getElementById('deselect-all-sessions'),
+  filtersSection: document.getElementById('filters-section'),
   emptyState: document.getElementById('empty-state'),
   tableContainer: document.getElementById('table-container'),
   recordsBody: document.getElementById('records-body'),
@@ -82,7 +85,9 @@ async function loadDirectory(root) {
   selectedSessionIds = new Set(sessions.keys());
 
   sortMessages();
+  renderGroupInfo();
   renderSessionsAccordion();
+  renderFilters();
   renderTable();
 
   els.folderName.textContent = root.name;
@@ -236,6 +241,53 @@ function cycleSort(column) {
   sortMessages();
   updateSortUI();
   renderTable();
+}
+
+// ---------------------------------------------------------------------------
+// Group info card
+// ---------------------------------------------------------------------------
+
+function renderGroupInfo() {
+  const groupIds = new Set(messages.map(m => m.groupId));
+  if (groupIds.size === 0) {
+    els.groupInfo.classList.add('hidden');
+    return;
+  }
+
+  const list = els.groupList;
+  list.innerHTML = '';
+
+  for (const groupId of groupIds) {
+    const session = Array.from(sessions.values()).find(s => s.groupId === groupId);
+    const groupName = session?.groupName ?? MISSING_FIELD;
+
+    const li = document.createElement('li');
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'group-name';
+    nameSpan.textContent = groupName;
+
+    const idSpan = document.createElement('span');
+    idSpan.className = 'group-id';
+    idSpan.textContent = groupId;
+
+    li.appendChild(nameSpan);
+    li.appendChild(idSpan);
+    list.appendChild(li);
+  }
+
+  els.groupInfo.classList.remove('hidden');
+}
+
+// ---------------------------------------------------------------------------
+// Filters card
+// ---------------------------------------------------------------------------
+
+function renderFilters() {
+  if (messages.length === 0) {
+    els.filtersSection.classList.add('hidden');
+    return;
+  }
+  els.filtersSection.classList.remove('hidden');
 }
 
 // ---------------------------------------------------------------------------
