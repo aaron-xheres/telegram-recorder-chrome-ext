@@ -286,16 +286,19 @@ body {
   display: block;
 }
 
-.links-cell a {
-  display: block;
-  word-break: break-all;
+.records-table td a {
   color: #2563eb;
   text-decoration: none;
-  margin-bottom: 2px;
+  word-break: break-all;
 }
 
-.links-cell a:hover {
+.records-table td a:hover {
   text-decoration: underline;
+}
+
+.links-cell a {
+  display: block;
+  margin-bottom: 2px;
 }
 
 .images-cell .image-badge {
