@@ -44,6 +44,14 @@
   const BUBBLES_SELECTOR = '.bubbles';
   const BUBBLE_SELECTOR = '.bubble';
 
+  const BUBBLES_CONTAINER_SELECTORS = [
+    '.bubbles',
+    '.bubbles-inner',
+    '[class*="bubbles"]',
+    '.chat-background',
+    '.scrollable.scrollable-y'
+  ];
+
   // ---------------------------------------------------------------------------
   // Cleanup registration
   // ---------------------------------------------------------------------------
@@ -72,7 +80,34 @@
    */
   function getGroupId() {
     const bubbles = document.querySelector(BUBBLES_SELECTOR);
-    return bubbles?.dataset.peerId ?? null;
+    if (bubbles?.dataset.peerId) {
+      return bubbles.dataset.peerId;
+    }
+
+    // Fallback: Telegram Web K puts the current chat peer ID in the URL hash.
+    const hash = location.hash?.replace(/^#/, '');
+    if (hash && /^-?\d+$/.test(hash)) {
+      return hash;
+    }
+
+    return null;
+  }
+
+  /**
+   * Find the scroll container that holds message bubbles.
+   * Telegram's DOM class names vary, so we try several candidates.
+   * @returns {Element|null}
+   */
+  function getBubblesContainer() {
+    for (const selector of BUBBLES_CONTAINER_SELECTORS) {
+      const el = document.querySelector(selector);
+      if (el) {
+        console.log('[TelegramRecorder] found bubbles container via', selector);
+        return el;
+      }
+    }
+    console.warn('[TelegramRecorder] no bubbles container found with known selectors');
+    return null;
   }
 
   /**
@@ -173,9 +208,9 @@
    * @param {string} sessionId
    */
   function startRecording(sessionId) {
-    const bubbles = document.querySelector(BUBBLES_SELECTOR);
+    const bubbles = getBubblesContainer();
     if (!bubbles) {
-      throw new Error('No .bubbles container found');
+      throw new Error('No bubbles container found');
     }
 
     isRecording = true;
