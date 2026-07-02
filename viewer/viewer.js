@@ -428,11 +428,95 @@ function closeLightbox() {
 }
 
 // ---------------------------------------------------------------------------
-// CSV export hooks (Phase 9)
+// CSV export
 // ---------------------------------------------------------------------------
 
-function getCurrentVisibleMessages() {
-  return getVisibleMessages();
+const CSV_HEADERS = [
+  'timestamp',
+  'session_id',
+  'session_label',
+  'group_id',
+  'group_name',
+  'poster_name',
+  'poster_id',
+  'content',
+  'links',
+  'images',
+  'screenshot_file',
+  'screenshot_path'
+];
+
+const CSV_COMMENTS = [
+  '# Screenshots are local files. Resolve paths relative to your telegram-recorder/ folder.',
+  '# Blob URLs in \'images\' column are ephemeral and expire when the recording tab is closed.'
+];
+
+/**
+ * Escape a CSV field by doubling internal quotes and wrapping in quotes.
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeCsvField(value) {
+  const text = value == null ? '' : String(value);
+  return '"' + text.replace(/"/g, '""').replace(/\n/g, '\\n') + '"';
+}
+
+/**
+ * Build CSV rows for the currently visible messages.
+ * @param {object[]} visibleMessages
+ * @returns {string[]}
+ */
+function buildCsvRows(visibleMessages) {
+  const rows = [];
+  rows.push(CSV_HEADERS.join(','));
+  rows.push(...CSV_COMMENTS);
+
+  for (const record of visibleMessages) {
+    const session = sessions.get(record.sessionId);
+    const screenshotFile = record.screenshotFile ?? '';
+    const screenshotPath = screenshotFile ? `${record.groupId}/${screenshotFile}` : '';
+
+    const row = [
+      record.timestamp,
+      record.sessionId,
+      session ? new Date(session.timestamp).toLocaleString() : '',
+      record.groupId,
+      session?.groupName ?? '',
+      record.posterName ?? '',
+      record.posterId ?? '',
+      record.content ?? '',
+      (record.links ?? []).join('|'),
+      (record.images ?? []).join('|'),
+      screenshotFile,
+      screenshotPath
+    ];
+
+    rows.push(row.map(escapeCsvField).join(','));
+  }
+
+  return rows;
+}
+
+function exportCsv() {
+  const visible = getVisibleMessages();
+  if (visible.length === 0) {
+    alert('No visible rows to export.');
+    return;
+  }
+
+  const csvString = buildCsvRows(visible).join('\n') + '\n';
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'telegram-recorder-export.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  // Give the browser a moment to start the download before revoking.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ---------------------------------------------------------------------------
@@ -453,6 +537,8 @@ els.sessionsToggle.addEventListener('click', () => {
 
 els.selectAllSessions.addEventListener('click', () => setAllSessions(true));
 els.deselectAllSessions.addEventListener('click', () => setAllSessions(false));
+
+els.exportCsv.addEventListener('click', exportCsv);
 
 document.querySelectorAll('#records-table th.sortable').forEach(th => {
   th.addEventListener('click', () => cycleSort(th.dataset.column));
