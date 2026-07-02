@@ -2,9 +2,9 @@
 // Scrolls a bubble into view, captures the visible tab, and crops to the bubble rect.
 
 // eslint-disable-next-line no-undef
-const SCREENSHOT_MSG = MESSAGE_TYPES;
+var SCREENSHOT_MSG = MESSAGE_TYPES;
 
-const CAPTURE_WAIT_MS = 150;
+var CAPTURE_WAIT_MS = 150;
 
 /**
  * @param {number} ms

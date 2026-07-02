@@ -1,6 +1,16 @@
 // Content script orchestration for Telegram Web K recording.
-// eslint-disable-next-line no-undef
-const CONTENT_MSG = MESSAGE_TYPES;
+(function () {
+  'use strict';
+
+  // Guard against duplicate injection (e.g. popup reinjection fallback).
+  if (globalThis.__telegramRecorderContentLoaded) {
+    console.log('[TelegramRecorder] content script already loaded; skipping duplicate injection');
+    return;
+  }
+  globalThis.__telegramRecorderContentLoaded = true;
+
+  // eslint-disable-next-line no-undef
+  var CONTENT_MSG = MESSAGE_TYPES;
 
 /**
  * @typedef {Object} QueueItem
@@ -301,3 +311,5 @@ chrome.storage.local.get(['recording', 'currentSessionId', 'currentGroupId']).th
 }).catch(err => {
   console.error('[TelegramRecorder] storage read failed', err);
 });
+
+})();
