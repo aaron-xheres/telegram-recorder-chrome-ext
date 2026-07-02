@@ -25,16 +25,13 @@ const MESSAGE_TEXT_SELECTORS = [
 
 const LINK_ANCHOR_SELECTORS = [
   'a.anchor-url',
-  '.translatable-message a',
-  '.message-text a',
-  'a[href]'
+  'a.mention',
+  'a.anchor-hashtag'
 ];
 
 const MEDIA_IMAGE_SELECTORS = [
   '.attachment img.media-photo',
-  '.media-container img.media-photo',
-  '.attachment img',
-  '.media-container img'
+  '.media-container img.media-photo'
 ];
 
 const TIMESTAMP_SELECTORS = [
@@ -46,17 +43,36 @@ const TIMESTAMP_SELECTORS = [
   '[class*="time"]'
 ];
 
+const EMOJI_ELEMENT_SELECTORS = [
+  'img.emoji',
+  'img.emoji-image',
+  'custom-emoji-element',
+  'custom-emoji-renderer-element'
+];
+
 /**
- * Walk up from a bubble to its parent bubbles-group and read the avatar's data-peer-id.
+ * Resolve the sender's peer ID.
+ * For public groups and forwarded messages the avatar may be inside the bubble
+ * (e.g. .bubble-name-forwarded-avatar) rather than the bubbles-group header.
  * @param {Element} bubble
  * @returns {string|null}
  */
 function resolveSenderPeerId(bubble) {
   try {
+    // 1. Bubble-level avatar (forwarded messages / public groups).
+    const bubbleAvatar = bubble.querySelector('.avatar[data-peer-id], .bubble-name-forwarded-avatar[data-peer-id]');
+    if (bubbleAvatar?.dataset.peerId) {
+      return bubbleAvatar.dataset.peerId;
+    }
+
+    // 2. Bubbles-group avatar (normal group chats).
     const group = bubble.closest('.bubbles-group');
-    if (!group) return null;
-    const avatar = group.querySelector('.bubbles-group-avatar[data-peer-id]');
-    return avatar?.dataset.peerId ?? null;
+    if (group) {
+      const avatar = group.querySelector('.bubbles-group-avatar[data-peer-id]');
+      if (avatar?.dataset.peerId) return avatar.dataset.peerId;
+    }
+
+    return null;
   } catch (err) {
     console.error('[TelegramRecorder] resolveSenderPeerId failed', err);
     return null;
@@ -70,7 +86,8 @@ function resolveSenderPeerId(bubble) {
  */
 function resolveSenderName(bubble) {
   try {
-    const title = bubble.querySelector('.colored-name .peer-title, span.peer-title');
+    // Forwarded posts expose the original sender's title inside the bubble.
+    const title = bubble.querySelector('.bubble-name-forwarded .peer-title, .colored-name .peer-title, span.peer-title');
     return title?.textContent?.trim() ?? null;
   } catch (err) {
     console.error('[TelegramRecorder] resolveSenderName failed', err);
@@ -79,16 +96,16 @@ function resolveSenderName(bubble) {
 }
 
 /**
- * Determine whether the sender is anonymous (admin posting as group or channel post).
+ * Determine whether the sender is anonymous (admin posting as group or channel post-as-group).
+ * A real channel/user sender, even with a negative peer ID, is NOT anonymous.
  * @param {string|null} posterId
  * @param {string} groupId
  * @returns {boolean}
  */
 function isAnonymousSender(posterId, groupId) {
   if (!posterId) return true;
+  // Anonymous only when the sender is explicitly posting as the group entity.
   if (posterId === groupId) return true;
-  // Negative peer IDs represent anonymous/group/channel entities in Telegram.
-  if (posterId.startsWith('-')) return true;
   return false;
 }
 
@@ -106,7 +123,7 @@ function findMessageTextContainer(bubble) {
 }
 
 /**
- * Extract text content from the bubble, stripping emoji images.
+ * Extract text content from the bubble, stripping emoji and stickers.
  * @param {Element} bubble
  * @returns {string|null}
  */
@@ -118,7 +135,7 @@ function extractText(bubble) {
       return null;
     }
     const clone = translatable.cloneNode(true);
-    clone.querySelectorAll('img.emoji, img.emoji-image').forEach(el => el.remove());
+    clone.querySelectorAll(EMOJI_ELEMENT_SELECTORS.join(', ')).forEach(el => el.remove());
     // Strip Telegram's inline message timestamp so it isn't appended to content.
     clone.querySelectorAll(TIMESTAMP_SELECTORS.join(', ')).forEach(el => el.remove());
     return clone.textContent.trim();
@@ -129,19 +146,17 @@ function extractText(bubble) {
 }
 
 /**
- * Extract unique absolute URLs from anchor tags in the message text.
+ * Extract unique absolute URLs and mentions/hashtags from the message text.
  * @param {Element} bubble
  * @returns {string[]}
  */
 function extractLinks(bubble) {
   try {
     const translatable = findMessageTextContainer(bubble);
+    const scope = translatable ?? bubble;
     const links = [];
-    const anchors = translatable
-      ? translatable.querySelectorAll('a.anchor-url')
-      : bubble.querySelectorAll(LINK_ANCHOR_SELECTORS.join(', '));
 
-    anchors.forEach(a => {
+    scope.querySelectorAll(LINK_ANCHOR_SELECTORS.join(', ')).forEach(a => {
       const url = a.href;
       if (url && !links.includes(url)) links.push(url);
     });
@@ -154,6 +169,7 @@ function extractLinks(bubble) {
 
 /**
  * Extract media image blob URLs from the bubble.
+ * Stickers and custom emoji are excluded even if they use <img> tags.
  * @param {Element} bubble
  * @returns {string[]}
  */
@@ -162,6 +178,7 @@ function extractMediaImages(bubble) {
     const images = [];
     bubble.querySelectorAll(MEDIA_IMAGE_SELECTORS.join(', ')).forEach(img => {
       if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return;
+      if (img.closest('custom-emoji-element, custom-emoji-renderer-element')) return;
       if (img.src && !images.includes(img.src)) images.push(img.src);
     });
     return images;
@@ -218,7 +235,7 @@ function extract(bubble, sessionId) {
       screenshotFile: messageId ? `${messageId}.png` : null
     };
 
-    console.log('[TelegramRecorder] extracted', messageId, { posterName, contentLength: content?.length, images: images.length, links: links.length });
+    console.log('[TelegramRecorder] extracted', messageId, { posterName, posterId, contentLength: content?.length, images: images.length, links: links.length });
     return record;
   } catch (err) {
     console.error('[TelegramRecorder] extract failed for bubble', bubble.dataset.mid, err);

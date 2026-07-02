@@ -164,6 +164,31 @@
   Orchestrate all extraction functions. Return full message data object matching
   [`PLAN.md §9.2`](PLAN.md#9-data-schemas) schema. Set `screenshotFile` to `${messageId}.png`.
 
+### 3c — Public groups, forwarded messages, and custom emoji
+
+> Implemented after initial Phase 3 to handle public groups and forwarded channel posts
+> whose DOM differs from private group chats.
+
+- [x] **3.c.1** Update `resolveSenderPeerId(bubble)` to check bubble-level avatars first:
+  `.avatar[data-peer-id]`, `.bubble-name-forwarded-avatar[data-peer-id]`.
+  Fall back to `.bubbles-group-avatar[data-peer-id]` for normal group chats.
+
+- [x] **3.c.2** Update `resolveSenderName(bubble)` to include forwarded sender names:
+  `.bubble-name-forwarded .peer-title`.
+
+- [x] **3.c.3** Update `isAnonymousSender(posterId, groupId)`:
+  Treat only `posterId === groupId` or missing `posterId` as anonymous.
+  Real channel/bot senders with negative peer IDs keep their own `posterId` and `posterName`.
+
+- [x] **3.c.4** Update `extractText(bubble)` to strip custom emoji/sticker elements:
+  `custom-emoji-element` and `custom-emoji-renderer-element`.
+
+- [x] **3.c.5** Update `extractLinks(bubble)` to include mentions and hashtags:
+  `a.mention`, `a.anchor-hashtag`, plus existing `a.anchor-url`.
+
+- [x] **3.c.6** Update `extractMediaImages(bubble)` to exclude sticker/emoji images
+  inside `custom-emoji-element` / `custom-emoji-renderer-element`.
+
 ### 3b — `content/content.js`
 
 - [x] **3.8** On script load, read recording state from `chrome.storage.local`. If `recording`
