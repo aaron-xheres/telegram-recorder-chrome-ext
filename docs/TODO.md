@@ -310,61 +310,61 @@
 > Ref: [`PLAN.md §13` — Viewer Page Specification](PLAN.md#13-viewer-page--specification),
 > [`PLAN.md §11.5` — Viewer Load Flow](PLAN.md#11-software-flows)
 
-- [ ] **7.1** Build `viewer/viewer.html` full structure:
+- [x] **7.1** Build `viewer/viewer.html` full structure:
   Header bar with "Open Folder", "Export CSV", and name search input.
   Session filter accordion (collapsed by default).
   Main table with all columns per [`PLAN.md §13.2`](PLAN.md#13-viewer-page--specification).
 
-- [ ] **7.2** Style `viewer/viewer.css`:
+- [x] **7.2** Style `viewer/viewer.css`:
   Readable table layout. Truncated content cells with expand-on-click.
   Accordion expand/collapse animation. Screenshot thumbnail max 80px height.
   Sortable header indicators (arrows). Responsive enough for typical screen widths.
 
-- [ ] **7.3** Implement "Open Folder" in `viewer/viewer.js`:
+- [x] **7.3** Implement "Open Folder" in `viewer/viewer.js`:
   `window.showDirectoryPicker({ mode: 'read' })`.
   Triggered only on button click (required user gesture).
 
-- [ ] **7.4** Implement multi-group directory traversal:
+- [x] **7.4** Implement multi-group directory traversal:
   Iterate top-level directory entries of the opened folder.
   For each subdirectory (treat directory name as `groupId`):
   - Read all file entries within
   - Route files: `manifest-*.json` → sessions list, `*.json` (other) → messages list,
     `*.png` → screenshot index keyed by stem filename
 
-- [ ] **7.5** Parse session manifests:
+- [x] **7.5** Parse session manifests:
   Build `Map<sessionId, SessionManifest>` from all `manifest-*.json` files across all groups.
 
-- [ ] **7.6** Parse message records:
+- [x] **7.6** Parse message records:
   Build `MessageRecord[]` from all non-manifest `.json` files. Enrich each with
   `sessionLabel` (from sessions map) and `groupName` (from matching session manifest).
 
-- [ ] **7.7** Build screenshot index:
+- [x] **7.7** Build screenshot index:
   `Map<messageId, FileSystemFileHandle>` — used to load PNG blobs on demand.
   Do not load all screenshots into memory at once.
 
-- [ ] **7.8** Implement table render:
+- [x] **7.8** Implement table render:
   Sort messages by timestamp DESC on initial load.
   Render all visible rows into `<tbody>`. Use the column mapping from
   [`PLAN.md §13.2`](PLAN.md#13-viewer-page--specification).
   Null `posterName` / `posterId` rendered as `—`.
 
-- [ ] **7.9** Implement sortable column headers:
+- [x] **7.9** Implement sortable column headers:
   Click once = ASC, again = DESC, third = reset to default (timestamp DESC).
   Show directional arrow indicator in active sort header.
 
-- [ ] **7.10** Implement poster name search:
+- [x] **7.10** Implement poster name search:
   Text input filters visible rows in real-time (case-insensitive substring match on
   `posterName`). Null `posterName` rows hidden when search is non-empty.
 
-- [ ] **7.11** Implement screenshot thumbnail per row:
+- [x] **7.11** Implement screenshot thumbnail per row:
   Load PNG via `URL.createObjectURL(await fileHandle.getFile())` on demand (when row
   enters viewport, or on table render). Show thumbnail max 80px height.
 
-- [ ] **7.12** Implement screenshot lightbox:
+- [x] **7.12** Implement screenshot lightbox:
   Click thumbnail → full-size image in overlay. Semi-transparent backdrop. Click outside
   or press Escape to close. Reuse same blob URL as thumbnail (already loaded).
 
-- [ ] **7.13** Revoke all blob URLs on `window.beforeunload` to prevent memory leaks.
+- [x] **7.13** Revoke all blob URLs on `window.beforeunload` to prevent memory leaks.
 
 ---
 
@@ -372,22 +372,22 @@
 
 > Ref: [`PLAN.md §13.3` — Session Filter](PLAN.md#13-viewer-page--specification)
 
-- [ ] **8.1** Render session accordion after folder is loaded:
+- [x] **8.1** Render session accordion after folder is loaded:
   Header "[▶ Sessions]" — click toggles expand/collapse.
   Collapsed by default.
 
-- [ ] **8.2** Render session checkboxes:
+- [x] **8.2** Render session checkboxes:
   One checkbox per session. Label format:
   `{session.timestamp → toLocaleString()}  ({groupName} — {n} messages)`
   All checked by default on load.
 
-- [ ] **8.3** Implement "Select All" button:
+- [x] **8.3** Implement "Select All" button:
   Check all session checkboxes. Re-apply row filter.
 
-- [ ] **8.4** Implement "Deselect All" button:
+- [x] **8.4** Implement "Deselect All" button:
   Uncheck all session checkboxes. Re-apply row filter (hides all rows).
 
-- [ ] **8.5** Implement real-time row filtering by session:
+- [x] **8.5** Implement real-time row filtering by session:
   On any checkbox change: re-evaluate table row visibility.
   A row is visible if its `sessionId` matches a checked session checkbox AND it passes
   the name search filter. Both filters applied together.
