@@ -24,12 +24,10 @@ const els = {
 // Current popup state.
 let activeTabId = null;
 let activeTabUrl = '';
-let state = {
-  recording: false,
-  currentSessionId: null,
-  currentGroupId: null,
-  currentGroupName: null
-};
+/** @type {object[]} */
+let activeSessions = [];
+/** @type {object|null} */
+let currentSession = null;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -106,6 +104,18 @@ async function fetchGroupInfo() {
   }
 }
 
+async function fetchActiveSessions() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: POPUP_MSG.GET_ACTIVE_SESSIONS });
+    activeSessions = Array.isArray(response?.sessions) ? response.sessions : [];
+    currentSession = activeSessions.find(s => s.tabId === activeTabId) ?? null;
+  } catch (err) {
+    console.error('[TelegramRecorder] fetchActiveSessions failed', err);
+    activeSessions = [];
+    currentSession = null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
@@ -141,40 +151,46 @@ function render() {
   setVisible(els.statusSection, true);
 
   const groupInfo = fetchGroupInfo(); // async; will re-render on response
-  // Initial render uses storage state; group info updates after response.
-  els.groupName.textContent = state.currentGroupName ?? 'No group open';
-  els.groupId.textContent = state.currentGroupId ?? '—';
 
-  const isRecording = Boolean(state.recording);
+  const isRecording = Boolean(currentSession);
   els.statusValue.classList.toggle('status-recording', isRecording);
   els.statusText.textContent = isRecording ? 'Recording' : 'Stopped';
 
-  if (isRecording && state.currentSessionId) {
+  if (isRecording) {
+    els.groupName.textContent = currentSession.groupName ?? 'Unknown';
+    els.groupId.textContent = currentSession.groupId ?? '—';
     setVisible(els.sessionRow, true);
-    els.sessionId.textContent = state.currentSessionId;
+    els.sessionId.textContent = currentSession.sessionId;
     setVisible(els.stopButton, true);
     setVisible(els.startButton, false);
   } else {
+    els.groupName.textContent = 'No group open';
+    els.groupId.textContent = '—';
     setVisible(els.sessionRow, false);
     setVisible(els.stopButton, false);
     setVisible(els.startButton, true);
-    const hasGroup = Boolean(state.currentGroupId);
-    els.startButton.disabled = !hasGroup;
-    els.startButton.title = hasGroup ? '' : 'Open a Telegram group chat first';
   }
 
   // Update group info asynchronously.
-  groupInfo.then(info => {
+  groupInfo.then(async info => {
     const hasGroup = Boolean(info.groupId);
-    els.groupName.textContent = hasGroup
-      ? (info.groupName ?? 'Unknown')
-      : 'No group open';
-    els.groupId.textContent = info.groupId ?? '—';
+    if (!isRecording) {
+      els.groupName.textContent = hasGroup
+        ? (info.groupName ?? 'Unknown')
+        : 'No group open';
+      els.groupId.textContent = info.groupId ?? '—';
+    }
 
     if (!isRecording) {
       setVisible(els.startButton, true);
       els.startButton.disabled = !hasGroup;
       els.startButton.title = hasGroup ? '' : 'Open a Telegram group chat first';
+
+      // If this group is already being recorded in another tab, block starting again.
+      if (hasGroup && activeSessions.some(s => s.groupId === info.groupId)) {
+        els.startButton.disabled = true;
+        els.startButton.title = 'This group is already being recorded in another tab';
+      }
     }
   });
 }
@@ -198,18 +214,17 @@ els.startButton.addEventListener('click', async () => {
   try {
     const response = await chrome.runtime.sendMessage({
       type: POPUP_MSG.START_RECORDING,
+      tabId: activeTabId,
       groupId: info.groupId,
       groupName: info.groupName ?? 'Unknown Group'
     });
 
     if (response?.ok) {
-      state.recording = true;
-      state.currentSessionId = response.sessionId;
-      state.currentGroupId = info.groupId;
-      state.currentGroupName = info.groupName ?? 'Unknown Group';
+      await fetchActiveSessions();
       render();
     } else {
       console.error('[TelegramRecorder] START_RECORDING failed', response);
+      alert(response?.error ?? 'Could not start recording');
     }
   } catch (err) {
     console.error('[TelegramRecorder] start recording error', err);
@@ -218,9 +233,8 @@ els.startButton.addEventListener('click', async () => {
 
 els.stopButton.addEventListener('click', async () => {
   try {
-    await chrome.runtime.sendMessage({ type: POPUP_MSG.STOP_RECORDING });
-    state.recording = false;
-    state.currentSessionId = null;
+    await chrome.runtime.sendMessage({ type: POPUP_MSG.STOP_RECORDING, tabId: activeTabId });
+    await fetchActiveSessions();
     render();
   } catch (err) {
     console.error('[TelegramRecorder] stop recording error', err);
@@ -241,20 +255,7 @@ async function init() {
   activeTabId = tab?.id ?? null;
   activeTabUrl = tab?.url ?? '';
 
-  const local = await chrome.storage.local.get([
-    'recording',
-    'currentSessionId',
-    'currentGroupId',
-    'currentGroupName'
-  ]);
-
-  state = {
-    recording: Boolean(local.recording),
-    currentSessionId: local.currentSessionId ?? null,
-    currentGroupId: local.currentGroupId ?? null,
-    currentGroupName: local.currentGroupName ?? null
-  };
-
+  await fetchActiveSessions();
   render();
 }
 
@@ -263,10 +264,10 @@ init().catch(err => console.error('[TelegramRecorder] popup init failed', err));
 // Listen for runtime messages (e.g. AUTO_STOPPED from background).
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === POPUP_MSG.AUTO_STOPPED) {
-    state.recording = false;
-    state.currentSessionId = null;
-    setVisible(els.autoStopNotice, true);
-    render();
+    fetchActiveSessions().then(() => {
+      setVisible(els.autoStopNotice, true);
+      render();
+    });
   }
   sendResponse({ ok: true });
   return false;

@@ -303,8 +303,9 @@
 
   /**
    * @param {string} sessionId
+   * @param {string} [groupId]
    */
-  function startRecording(sessionId) {
+  function startRecording(sessionId, groupId) {
     const bubbles = getBubblesContainer();
     if (!bubbles) {
       throw new Error('No bubbles container found');
@@ -312,7 +313,7 @@
 
     isRecording = true;
     currentSessionId = sessionId;
-    currentGroupId = getGroupId() ?? '';
+    currentGroupId = groupId || getGroupId() || '';
     baselineSet = buildBaselineSet();
     recordedSet = new Set();
 
@@ -420,7 +421,7 @@
 
       case CONTENT_MSG.START_RECORDING: {
         try {
-          startRecording(message.sessionId);
+          startRecording(message.sessionId, message.groupId);
           sendResponse({ ok: true });
         } catch (err) {
           console.error('[TelegramRecorder] START_RECORDING failed', err);
@@ -457,19 +458,22 @@
   // Rehydration on script load
   // ---------------------------------------------------------------------------
 
-  chrome.storage.local.get(['recording', 'currentSessionId', 'currentGroupId']).then(state => {
-    if (state.recording && state.currentSessionId) {
-      try {
-        startRecording(state.currentSessionId);
-        currentGroupId = state.currentGroupId ?? currentGroupId;
-      } catch (err) {
-        console.error('[TelegramRecorder] failed to rehydrate recording', err);
-        stopRecordingAndNotify();
+  (async function rehydrate() {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: CONTENT_MSG.GET_SESSION });
+      const session = response?.session;
+      if (session?.sessionId) {
+        try {
+          startRecording(session.sessionId, session.groupId);
+        } catch (err) {
+          console.error('[TelegramRecorder] failed to rehydrate recording', err);
+          stopRecordingAndNotify();
+        }
       }
+    } catch (err) {
+      console.error('[TelegramRecorder] session rehydration failed', err);
     }
-  }).catch(err => {
-    console.error('[TelegramRecorder] storage read failed', err);
-  });
+  })();
 
   // ---------------------------------------------------------------------------
   // Cleanup registration for future reinjection

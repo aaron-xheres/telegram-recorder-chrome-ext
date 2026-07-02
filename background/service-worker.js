@@ -1,5 +1,7 @@
 // Background service worker for Telegram Message Recorder.
 // Coordinates state, storage, downloads, and messaging between popup and content scripts.
+// Supports multiple concurrent recording sessions across tabs/windows, with one session
+// per Telegram group (guard by groupId).
 
 importScripts('../shared/messages.js');
 
@@ -7,33 +9,17 @@ importScripts('../shared/messages.js');
 const MSG = MESSAGE_TYPES;
 
 /**
- * In-memory state rehydrated from storage on service worker startup.
- * @typedef {Object} ServiceState
- * @property {boolean} recording
- * @property {string|null} currentSessionId
- * @property {string|null} currentGroupId
- * @property {string|null} currentGroupName
+ * @typedef {Object} ActiveSession
+ * @property {number} tabId
+ * @property {string} sessionId
+ * @property {string} groupId
+ * @property {string|null} groupName
  */
 
-/** @type {ServiceState} */
-let state = {
-  recording: false,
-  currentSessionId: null,
-  currentGroupId: null,
-  currentGroupName: null
-};
+const ACTIVE_SESSIONS_KEY = 'activeSessions';
 
-/** @type {string[]} */
-let recordedSet = [];
-
-const STORAGE_LOCAL_KEYS = [
-  'recording',
-  'currentSessionId',
-  'currentGroupId',
-  'currentGroupName'
-];
-
-const STORAGE_SESSION_KEY = 'recordedSet';
+/** @type {Map<number, ActiveSession>} */
+let activeSessions = new Map();
 
 /**
  * Convert an object to a data URL suitable for chrome.downloads.download().
@@ -45,28 +31,82 @@ function jsonDataUrl(obj) {
 }
 
 /**
- * Persist the in-memory state to chrome.storage.local.
+ * Persist the active sessions map to chrome.storage.local.
  */
-async function persistState() {
-  await chrome.storage.local.set({
-    recording: state.recording,
-    currentSessionId: state.currentSessionId,
-    currentGroupId: state.currentGroupId,
-    currentGroupName: state.currentGroupName
-  });
+async function persistSessions() {
+  const sessions = Array.from(activeSessions.values());
+  await chrome.storage.local.set({ [ACTIVE_SESSIONS_KEY]: sessions });
 }
 
 /**
- * Clear recording state in memory and storage, but preserve other settings.
+ * Load active sessions from chrome.storage.local into the in-memory map.
  */
-async function clearRecordingState() {
-  state.recording = false;
-  state.currentSessionId = null;
-  state.currentGroupId = null;
-  state.currentGroupName = null;
-  recordedSet = [];
-  await persistState();
-  await chrome.storage.session.set({ recordedSet: [] });
+async function loadSessions() {
+  const result = await chrome.storage.local.get(ACTIVE_SESSIONS_KEY);
+  const sessions = Array.isArray(result[ACTIVE_SESSIONS_KEY]) ? result[ACTIVE_SESSIONS_KEY] : [];
+  activeSessions = new Map();
+  for (const session of sessions) {
+    if (session && typeof session.tabId === 'number') {
+      activeSessions.set(session.tabId, session);
+    }
+  }
+}
+
+/**
+ * @param {number} tabId
+ * @returns {ActiveSession|null}
+ */
+function getSessionByTabId(tabId) {
+  return activeSessions.get(tabId) ?? null;
+}
+
+/**
+ * Check whether any active session is already recording the given group.
+ * @param {string} groupId
+ * @returns {boolean}
+ */
+function hasSessionForGroup(groupId) {
+  for (const session of activeSessions.values()) {
+    if (session.groupId === groupId) return true;
+  }
+  return false;
+}
+
+/**
+ * @param {number} tabId
+ * @param {string} sessionId
+ * @param {string} groupId
+ * @param {string|null} groupName
+ */
+async function addSession(tabId, sessionId, groupId, groupName) {
+  activeSessions.set(tabId, { tabId, sessionId, groupId, groupName: groupName ?? null });
+  await persistSessions();
+}
+
+/**
+ * Remove a session from the map and persist.
+ * @param {number} tabId
+ */
+async function removeSession(tabId) {
+  activeSessions.delete(tabId);
+  await persistSessions();
+}
+
+/**
+ * Stop a session and notify its content script.
+ * @param {number} tabId
+ * @returns {Promise<boolean>}
+ */
+async function stopSession(tabId) {
+  const session = activeSessions.get(tabId);
+  if (!session) return false;
+  try {
+    await chrome.tabs.sendMessage(tabId, { type: MSG.STOP_RECORDING });
+  } catch (err) {
+    console.warn('[TelegramRecorder] could not notify tab of stop', tabId, err);
+  }
+  await removeSession(tabId);
+  return true;
 }
 
 /**
@@ -182,31 +222,25 @@ async function captureVisibleTabWithRetry(windowId) {
 }
 
 /**
- * Rehydrate in-memory state from persistent/session storage.
+ * Rehydrate in-memory sessions from persistent storage.
  * Called on startup and after any service worker wake event.
- * @param {boolean} preserveRecording Whether to preserve a true `recording` flag
+ * @param {boolean} preserveSessions Whether to preserve stored sessions
  *   (used on normal wake). On browser startup or extension install the session is
- *   interrupted, so recording is left stopped.
+ *   interrupted, so sessions are cleared.
  */
-async function rehydrateState(preserveRecording = true) {
-  const local = await chrome.storage.local.get(STORAGE_LOCAL_KEYS);
-  state.recording = preserveRecording ? Boolean(local.recording) : false;
-  state.currentSessionId = local.currentSessionId ?? null;
-  state.currentGroupId = local.currentGroupId ?? null;
-  state.currentGroupName = local.currentGroupName ?? null;
-
-  const session = await chrome.storage.session.get(STORAGE_SESSION_KEY);
-  recordedSet = Array.isArray(session.recordedSet) ? session.recordedSet : [];
-
-  if (!preserveRecording && local.recording) {
-    // Browser restarted / extension installed while a session was active. Leave it stopped
-    // and update storage so content scripts do not try to reattach on next load.
-    await persistState();
+async function rehydrateState(preserveSessions = true) {
+  if (preserveSessions) {
+    await loadSessions();
+    return;
   }
+
+  // Browser restarted / extension installed: clear any stale sessions.
+  activeSessions = new Map();
+  await persistSessions();
 }
 
-// Initial rehydration (normal service worker wake) — preserve recording so the content
-// script can reattach if the browser session is still alive.
+// Initial rehydration (normal service worker wake) — preserve sessions so content
+// scripts can reattach if the browser session is still alive.
 rehydrateState(true).catch(err => console.error('[TelegramRecorder] rehydrate failed', err));
 
 chrome.runtime.onStartup.addListener(() => {
@@ -217,6 +251,25 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.runtime.onInstalled.addListener(() => {
   // Extension installed/updated: do not auto-resume any previous recording.
   rehydrateState(false).catch(err => console.error('[TelegramRecorder] install rehydrate failed', err));
+});
+
+// Clean up sessions when their tab is closed.
+chrome.tabs.onRemoved.addListener(tabId => {
+  if (activeSessions.has(tabId)) {
+    removeSession(tabId).catch(err => {
+      console.error('[TelegramRecorder] failed to remove session for closed tab', tabId, err);
+    });
+  }
+});
+
+// Safety net: if a tab navigates away from Telegram Web K, end its session.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!activeSessions.has(tabId)) return;
+  if (changeInfo.url && !changeInfo.url.startsWith('https://web.telegram.org/k/')) {
+    stopSession(tabId).catch(err => {
+      console.error('[TelegramRecorder] failed to stop session after navigation', tabId, err);
+    });
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -243,8 +296,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.type) {
     case MSG.GET_GROUP_INFO:
       // Forwarded to content script by popup via background for routing stability.
-      // Handled in Phase 6.
       sendResponse({ ok: false, error: 'Not implemented yet' });
+      break;
+
+    case MSG.GET_SESSION:
+      sendResponse({ ok: true, session: getSessionByTabId(tabId ?? -1) });
+      break;
+
+    case MSG.GET_ACTIVE_SESSIONS:
+      sendResponse({ ok: true, sessions: Array.from(activeSessions.values()) });
       break;
 
     case MSG.START_RECORDING: {
@@ -255,30 +315,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       handleAsync(
         (async () => {
-          const tabId = await findActiveTelegramKTab();
-          if (!tabId) {
+          if (hasSessionForGroup(groupId)) {
+            return { ok: false, error: `A recording for group ${groupId} is already active` };
+          }
+
+          const targetTabId = message.tabId ?? await findActiveTelegramKTab();
+          if (!targetTabId) {
             return { ok: false, error: 'No active Telegram Web K tab found' };
           }
 
+          // Verify the tab is actually on Telegram Web K.
+          try {
+            const tab = await chrome.tabs.get(targetTabId);
+            if (!tab.url || !tab.url.startsWith('https://web.telegram.org/k/')) {
+              return { ok: false, error: 'Target tab is not on Telegram Web K' };
+            }
+          } catch (err) {
+            return { ok: false, error: 'Could not inspect target tab: ' + (err.message ?? String(err)) };
+          }
+
           const sessionId = Date.now().toString();
-          state.recording = true;
-          state.currentSessionId = sessionId;
-          state.currentGroupId = groupId;
-          state.currentGroupName = groupName ?? null;
-          recordedSet = [];
-          await persistState();
-          await chrome.storage.session.set({ recordedSet: [] });
           await saveManifest(sessionId, groupId, groupName ?? '');
+          await addSession(targetTabId, sessionId, groupId, groupName ?? null);
 
           try {
-            await chrome.tabs.sendMessage(tabId, { type: MSG.START_RECORDING, sessionId });
+            await chrome.tabs.sendMessage(targetTabId, { type: MSG.START_RECORDING, sessionId, groupId });
           } catch (err) {
-            // Content script not reachable — roll back to a clean stopped state.
-            await clearRecordingState();
+            // Content script not reachable — roll back.
+            await removeSession(targetTabId);
             return { ok: false, error: 'Could not reach content script: ' + (err.message ?? String(err)) };
           }
 
-          return { ok: true, sessionId };
+          return { ok: true, sessionId, tabId: targetTabId };
         })()
       );
       return true;
@@ -287,12 +355,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case MSG.STOP_RECORDING: {
       handleAsync(
         (async () => {
-          const previousTabId = state.currentGroupId ? await findActiveTelegramKTab() : null;
-          await clearRecordingState();
-          if (previousTabId) {
-            await chrome.tabs.sendMessage(previousTabId, { type: MSG.STOP_RECORDING });
+          const targetTabId = message.tabId ?? await findActiveTelegramKTab();
+          if (!targetTabId) {
+            return { ok: false, error: 'No Telegram Web K tab specified or active' };
           }
-          return { ok: true };
+
+          const stopped = await stopSession(targetTabId);
+          return { ok: stopped };
         })()
       );
       return true;
@@ -341,7 +410,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case MSG.AUTO_STOPPED: {
       handleAsync(
-        clearRecordingState().then(() => ({ ok: true }))
+        (async () => {
+          if (tabId) await removeSession(tabId);
+          return { ok: true };
+        })()
       );
       return true;
     }
