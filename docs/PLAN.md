@@ -508,10 +508,10 @@ message text, not standalone media attachments.
 7. dpr = window.devicePixelRatio  — account for retina displays
 
 8. content.js → background: { type: 'CAPTURE_TAB' }
-9. background: chrome.tabs.captureVisibleTab({ format: 'png' }) with 3 retries
+9. background focuses the sender window/tab, then calls chrome.tabs.captureVisibleTab({ format: 'png' })
+   with 3 retries. Empty data URLs are treated as failures and retried.
    → fullDataUrl (entire visible tab as PNG base64)
 10. background → content.js: { fullDataUrl }
-11. content.js retries the message up to 3 times if fullDataUrl is missing
 
 12. content.js: create <canvas> width=(visibleRect.width × dpr), height=(visibleRect.height × dpr)
 13. img.onload: ctx.drawImage(fullImg, -(visibleRect.left × dpr), -(visibleRect.top × dpr))
@@ -529,10 +529,10 @@ message text, not standalone media attachments.
   the active Telegram tab, so this is always satisfied.
 - `scrollIntoView` with `behavior: 'instant'` prevents animation delay. 150ms wait is the
   minimum observed for repaint; adjust if screenshots show partially rendered content.
-- Both the content script and the service worker retry the capture up to 3 times with short
-  delays, because `captureVisibleTab` can occasionally return an empty result while the page
-  is still painting or the window focus is transitioning. JSON is still saved if all retries
-  fail.
+- The service worker focuses the sender window/tab before each capture and retries up to
+  3 times with 500 ms delays, because `captureVisibleTab` can return an empty result while
+  the page is still painting or the window focus is transitioning. JSON is still saved if all
+  retries fail. This briefly brings the Telegram window to the foreground.
 - Messages taller than the viewport are scrolled to the top and clipped to the visible area.
   This avoids transparent/failed screenshots; very long messages are therefore captured as
   their top portion only.

@@ -162,14 +162,20 @@ async function captureVisibleTabWithRetry(windowId) {
   let lastErr;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
+      let fullDataUrl;
       if (windowId) {
-        return await chrome.tabs.captureVisibleTab(windowId, options);
+        fullDataUrl = await chrome.tabs.captureVisibleTab(windowId, options);
+      } else {
+        fullDataUrl = await chrome.tabs.captureVisibleTab(options);
       }
-      return await chrome.tabs.captureVisibleTab(options);
+      if (!fullDataUrl) {
+        throw new Error('captureVisibleTab returned empty data URL');
+      }
+      return fullDataUrl;
     } catch (err) {
       lastErr = err;
       console.warn('[TelegramRecorder] captureVisibleTab attempt', attempt, 'failed:', err?.message ?? err);
-      if (attempt < 3) await sleep(300);
+      if (attempt < 3) await sleep(500);
     }
   }
   throw lastErr ?? new Error('captureVisibleTab failed after retries');
@@ -298,8 +304,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         break;
       }
       handleAsync(
-        captureVisibleTabWithRetry(sender.tab?.windowId)
-          .then(fullDataUrl => ({ ok: true, fullDataUrl }))
+        (async () => {
+          try {
+            // Capture requires the target window/tab to be visible. Focus it first
+            // so Chrome reliably returns a non-empty screenshot.
+            const windowId = sender.tab?.windowId;
+            if (windowId) {
+              await chrome.windows.update(windowId, { focused: true });
+            }
+            await chrome.tabs.update(tabId, { active: true });
+            await sleep(100);
+
+            const fullDataUrl = await captureVisibleTabWithRetry(windowId);
+            return { ok: true, fullDataUrl };
+          } catch (err) {
+            console.error('[TelegramRecorder] CAPTURE_TAB failed for tab', tabId, err);
+            return { ok: false, error: err?.message ?? String(err) };
+          }
+        })()
       );
       return true; // keep channel open for async response
     }
