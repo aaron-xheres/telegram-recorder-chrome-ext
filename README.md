@@ -13,8 +13,18 @@ A Chrome extension that records messages from **Telegram Web K** (`web.telegram.
 
 ## Installation
 
+### Google Chrome
+
 1. Open Chrome and navigate to `chrome://extensions/`.
 2. Enable **Developer mode** (toggle in the top-right).
+3. Click **Load unpacked**.
+4. Select the `telegram-recorder-chrome-ext` directory.
+5. The extension icon should appear in your toolbar.
+
+### Microsoft Edge
+
+1. Open Edge and navigate to `edge://extensions/`.
+2. Enable **Developer mode** (toggle in the bottom-left).
 3. Click **Load unpacked**.
 4. Select the `telegram-recorder-chrome-ext` directory.
 5. The extension icon should appear in your toolbar.
