@@ -74,6 +74,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  const tabId = sender.tab?.id;
+
+  /**
+   * Helper for async handlers. Keeps the message channel open until the promise settles.
+   * @param {Promise<any>} promise
+   */
+  function handleAsync(promise) {
+    promise
+      .then(result => sendResponse(result))
+      .catch(err => {
+        console.error('[TelegramRecorder] message handler error', message.type, err);
+        sendResponse({ ok: false, error: err.message ?? String(err) });
+      });
+  }
+
   switch (message.type) {
     case MSG.GET_GROUP_INFO:
       // Forwarded to content script by popup via background for routing stability.
@@ -91,10 +106,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: false, error: 'Not implemented yet' });
       break;
 
-    case MSG.CAPTURE_TAB:
-      // Implemented in Phase 4.
-      sendResponse({ ok: false, error: 'Not implemented yet' });
-      break;
+    case MSG.CAPTURE_TAB: {
+      if (!tabId) {
+        sendResponse({ ok: false, error: 'CAPTURE_TAB requires sender tab' });
+        break;
+      }
+      handleAsync(
+        chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: 'png' })
+          .then(fullDataUrl => ({ ok: true, fullDataUrl }))
+      );
+      return true; // keep channel open for async response
+    }
 
     case MSG.SAVE_FILES:
       // Implemented in Phase 5.
