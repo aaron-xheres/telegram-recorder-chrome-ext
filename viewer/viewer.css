@@ -361,17 +361,8 @@ body {
 }
 
 .content-text {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  cursor: pointer;
-  white-space: pre-wrap;
-}
-
-.content-text.expanded {
-  -webkit-line-clamp: unset;
   display: block;
+  white-space: pre-wrap;
 }
 
 .records-table td a {
