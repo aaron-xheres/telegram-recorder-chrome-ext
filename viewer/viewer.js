@@ -796,8 +796,16 @@ function addPosterNameFilter() {
 function addContentFilter() {
   const value = els.contentInput.value.trim();
   if (!value) return;
-  if (!contentFilters.includes(value)) {
-    contentFilters.push(value);
+  const filter = {
+    term: value,
+    matchCase: contentMatchCase,
+    matchWord: contentMatchWord
+  };
+  const exists = contentFilters.some(
+    f => f.term === filter.term && f.matchCase === filter.matchCase && f.matchWord === filter.matchWord
+  );
+  if (!exists) {
+    contentFilters.push(filter);
     renderFilters();
     renderTable();
   }
