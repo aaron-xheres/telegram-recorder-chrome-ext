@@ -380,17 +380,15 @@ body {
   margin-bottom: 2px;
 }
 
-.images-cell .image-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  background: #e5e7eb;
-  border-radius: 999px;
+.images-cell .image-count {
   font-size: 12px;
-  cursor: pointer;
+  color: #6b7280;
+  margin-bottom: 4px;
 }
 
-.images-cell .image-badge:hover {
-  background: #d1d5db;
+.images-cell a {
+  display: block;
+  margin-bottom: 2px;
 }
 
 .screenshot-thumb {

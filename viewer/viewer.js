@@ -578,7 +578,7 @@ function renderTable() {
     tr.appendChild(createCell(record.posterName ?? MISSING_FIELD));
     tr.appendChild(createIdCell(record.posterId));
     tr.appendChild(createContentCell(record.content));
-    tr.appendChild(createImagesCell(record.images, record.messageId));
+    tr.appendChild(createImagesCell(record.images));
     tr.appendChild(createLinksCell(record.links));
     tr.appendChild(createScreenshotCell(record.messageId));
 
@@ -623,18 +623,26 @@ function createContentCell(content) {
   return td;
 }
 
-function createImagesCell(images, messageId) {
+function createImagesCell(images) {
   const td = document.createElement('td');
   td.className = 'images-cell';
   if (!images || images.length === 0) {
     td.textContent = MISSING_FIELD;
     return td;
   }
-  const badge = document.createElement('span');
-  badge.className = 'image-badge';
-  badge.textContent = `${images.length} image${images.length === 1 ? '' : 's'}`;
-  badge.title = images.join('\n');
-  td.appendChild(badge);
+  const count = document.createElement('div');
+  count.className = 'image-count';
+  count.textContent = `${images.length} image${images.length === 1 ? '' : 's'}`;
+  td.appendChild(count);
+  for (const url of images) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.textContent = url;
+    a.title = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    td.appendChild(a);
+  }
   return td;
 }
 
