@@ -996,14 +996,18 @@ checked, this section imposes no restriction.
 [▶ Sessions]   ← click to expand/collapse
   ──────────────────────────────────────────
   [ Select All ]  [ Deselect All ]
-  ☑ 2024-01-01 08:00:00  (Group A — 24 messages)
-  ☑ 2024-01-01 09:00:00  (Group A — 31 messages)
-  ☐ 2024-01-02 10:00:00  (Group B — 8 messages)
+  ┌─────┬──────────────┬───────────┬──────────┐
+  │     │ Session ID   │ Group Name│ Messages │
+  │ ☑   │ 1704067200000│ Group A   │ 24       │
+  │ ☑   │ 1704070800000│ Group A   │ 31       │
+  │ ☐   │ 1704153600000│ Group B   │ 8        │
+  └─────┴──────────────┴───────────┴──────────┘
 ```
 
-- Each checkbox labelled: `{localTime}  ({groupName} — {n} messages)`
-- Unchecking hides matching rows in real-time (no reload)
-- Select/Deselect All operates on all visible checkboxes
+- Sessions are shown in a small table with columns: Session ID, Group Name, Messages.
+- The first column contains only a checkbox (no header) and is sized to fit the checkbox.
+- Unchecking a session hides its rows in real-time (no reload).
+- Select/Deselect All operates on all session checkboxes.
 
 ### 13.5 Screenshot Lightbox
 

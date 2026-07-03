@@ -273,21 +273,30 @@ body {
   margin-bottom: 10px;
 }
 
-.sessions-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.sessions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
 }
 
-.sessions-list label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  cursor: pointer;
+.sessions-table th,
+.sessions-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.sessions-table th {
+  background: #f9fafb;
+  font-weight: 600;
+}
+
+.sessions-table .checkbox-col {
+  width: 1.5rem;
+  padding-left: 8px;
+  padding-right: 0;
+  text-align: center;
 }
 
 .empty-state {

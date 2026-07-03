@@ -25,7 +25,8 @@ const els = {
   sessionsSection: document.getElementById('sessions-section'),
   sessionsToggle: document.getElementById('sessions-toggle'),
   sessionsPanel: document.getElementById('sessions-panel'),
-  sessionsList: document.getElementById('sessions-list'),
+  sessionsTable: document.getElementById('sessions-table'),
+  sessionsTableBody: document.getElementById('sessions-table-body'),
   selectAllSessions: document.getElementById('select-all-sessions'),
   deselectAllSessions: document.getElementById('deselect-all-sessions'),
   filtersSection: document.getElementById('filters-section'),
@@ -516,8 +517,8 @@ function renderSessionsAccordion() {
     counts.set(record.sessionId, (counts.get(record.sessionId) || 0) + 1);
   }
 
-  const list = els.sessionsList;
-  list.innerHTML = '';
+  const tbody = els.sessionsTableBody;
+  tbody.innerHTML = '';
 
   const sortedSessions = Array.from(sessions.values()).sort(
     (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
@@ -525,33 +526,45 @@ function renderSessionsAccordion() {
 
   for (const session of sortedSessions) {
     const count = counts.get(session.id) || 0;
-    const labelText = `${getSessionLabel(session.id)}  (${session.groupName} — ${count} message${count === 1 ? '' : 's'})`;
 
-    const li = document.createElement('li');
-    const label = document.createElement('label');
+    const tr = document.createElement('tr');
+
+    const checkboxTd = document.createElement('td');
+    checkboxTd.className = 'checkbox-col';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = selectedSessionIds.has(session.id);
     checkbox.dataset.sessionId = session.id;
     checkbox.addEventListener('change', onSessionFilterChange);
+    checkboxTd.appendChild(checkbox);
+    tr.appendChild(checkboxTd);
 
-    label.appendChild(checkbox);
-    label.appendChild(document.createTextNode(labelText));
-    li.appendChild(label);
-    list.appendChild(li);
+    const idTd = document.createElement('td');
+    idTd.textContent = session.id;
+    tr.appendChild(idTd);
+
+    const nameTd = document.createElement('td');
+    nameTd.textContent = session.groupName ?? MISSING_FIELD;
+    tr.appendChild(nameTd);
+
+    const countTd = document.createElement('td');
+    countTd.textContent = String(count);
+    tr.appendChild(countTd);
+
+    tbody.appendChild(tr);
   }
 }
 
 function onSessionFilterChange() {
   selectedSessionIds = new Set();
-  els.sessionsList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+  els.sessionsTableBody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
     if (cb.checked) selectedSessionIds.add(cb.dataset.sessionId);
   });
   renderTable();
 }
 
 function setAllSessions(checked) {
-  els.sessionsList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+  els.sessionsTableBody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
     cb.checked = checked;
   });
   onSessionFilterChange();
