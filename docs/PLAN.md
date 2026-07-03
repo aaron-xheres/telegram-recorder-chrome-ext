@@ -426,17 +426,26 @@ messages that were inserted during brief observer detachments without adding not
 
 ## 6. Content Extraction Rules
 
-### 6.1 Text Content — Emoji / Sticker Stripping
+### 6.1 Text Content — Emoji / Sticker Markers
 
 Emoji are rendered as `<img class="emoji emoji-image" alt="💰">` inside `.translatable-message`.
 Public groups and channels also use `<custom-emoji-element>` and `<custom-emoji-renderer-element>`
-for stickers and custom emoji. All of these must be removed before reading text. The `alt`
-unicode char and `data-sticker-emoji` attribute are NOT preserved.
+for stickers and custom emoji. These elements are replaced with markers so the extracted text
+still indicates where an emoji appeared.
+
+Marker rules:
+- `data-sticker-emoji` attribute → `{value}` (e.g. `{✨}`)
+- `alt` attribute → `{value}` (e.g. `{💰}`)
+- No usable attribute → `{}`
 
 ```
 clone = translatable.cloneNode(true)
 clone.querySelectorAll('img.emoji, img.emoji-image, custom-emoji-element, custom-emoji-renderer-element')
-  .forEach(el => el.remove())
+  .forEach(el => {
+    marker = el.dataset.stickerEmoji?.trim() || el.alt?.trim() ||
+             el.querySelector('img[alt]')?.alt?.trim() || ''
+    el.replaceWith(document.createTextNode(marker ? `{${marker}}` : '{}'))
+  })
 // Telegram interleaves a lot of wrapper whitespace around stickers/emoji; collapse runs
 // so the extracted text remains readable.
 content = clone.textContent.replace(/\s+/g, ' ').trim()

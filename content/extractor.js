@@ -128,7 +128,28 @@ function findMessageTextContainer(bubble) {
 }
 
 /**
- * Extract text content from the bubble, stripping emoji and stickers.
+ * Build a marker string for an emoji/sticker element so we can tell it apart
+ * from plain text in the extracted content. Uses the alt text or sticker emoji
+ * attribute when available; otherwise falls back to empty braces.
+ * @param {Element} el
+ * @returns {string}
+ */
+function getEmojiMarker(el) {
+  const stickerEmoji = el.getAttribute?.('data-sticker-emoji')?.trim();
+  if (stickerEmoji) return `{${stickerEmoji}}`;
+
+  let alt = el.getAttribute?.('alt')?.trim();
+  if (!alt) {
+    const innerImg = el.querySelector('img[alt]');
+    alt = innerImg?.getAttribute('alt')?.trim() ?? '';
+  }
+
+  return alt ? `{${alt}}` : '{}';
+}
+
+/**
+ * Extract text content from the bubble, replacing emoji/stickers with
+ * `{alt}` markers and stripping the inline timestamp.
  * @param {Element} bubble
  * @returns {string|null}
  */
@@ -140,7 +161,9 @@ function extractText(bubble) {
       return null;
     }
     const clone = translatable.cloneNode(true);
-    clone.querySelectorAll(EMOJI_ELEMENT_SELECTORS.join(', ')).forEach(el => el.remove());
+    clone.querySelectorAll(EMOJI_ELEMENT_SELECTORS.join(', ')).forEach(el => {
+      el.replaceWith(document.createTextNode(getEmojiMarker(el)));
+    });
     // Strip Telegram's inline message timestamp so it isn't appended to content.
     clone.querySelectorAll(TIMESTAMP_SELECTORS.join(', ')).forEach(el => el.remove());
     // Telegram interleaves a lot of custom-emoji/sticker whitespace; collapse runs
