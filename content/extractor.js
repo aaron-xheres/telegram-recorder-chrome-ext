@@ -128,28 +128,50 @@ function findMessageTextContainer(bubble) {
 }
 
 /**
- * Build a marker string for an emoji/sticker element so we can tell it apart
- * from plain text in the extracted content. Uses the alt text or sticker emoji
- * attribute when available; otherwise falls back to empty braces.
- * @param {Element} el
- * @returns {string}
+ * Determine whether a string is a single default emoji grapheme.
+ * @param {string} str
+ * @returns {boolean}
  */
-function getEmojiMarker(el) {
-  const stickerEmoji = el.getAttribute?.('data-sticker-emoji')?.trim();
-  if (stickerEmoji) return `{${stickerEmoji}}`;
-
-  let alt = el.getAttribute?.('alt')?.trim();
-  if (!alt) {
-    const innerImg = el.querySelector('img[alt]');
-    alt = innerImg?.getAttribute('alt')?.trim() ?? '';
+function isSingleEmoji(str) {
+  try {
+    const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+    const segments = Array.from(segmenter.segment(str));
+    if (segments.length !== 1) return false;
+    return /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(segments[0].segment);
+  } catch (err) {
+    // Fallback for environments without Intl.Segmenter.
+    return Array.from(str).length === 1 && /\p{Extended_Pictographic}/u.test(str);
   }
-
-  return alt ? `{${alt}}` : '{}';
 }
 
 /**
- * Extract text content from the bubble, replacing emoji/stickers with
- * `{alt}` markers and stripping the inline timestamp.
+ * Build a replacement string for an emoji/sticker element. Default emoji are
+ * kept as-is; custom stickers/descriptions are wrapped in braces so we can tell
+ * them apart from plain text.
+ * @param {Element} el
+ * @returns {string}
+ */
+function getEmojiReplacement(el) {
+  const stickerEmoji = el.getAttribute?.('data-sticker-emoji')?.trim();
+  let candidate = stickerEmoji;
+
+  if (!candidate) {
+    candidate = el.getAttribute?.('alt')?.trim();
+  }
+
+  if (!candidate) {
+    const innerImg = el.querySelector('img[alt]');
+    candidate = innerImg?.getAttribute('alt')?.trim() ?? '';
+  }
+
+  if (!candidate) return '{}';
+  if (isSingleEmoji(candidate)) return candidate;
+  return `{${candidate}}`;
+}
+
+/**
+ * Extract text content from the bubble, replacing emoji/stickers with their
+ * default emoji character or a `{alt}` marker, and stripping the inline timestamp.
  * @param {Element} bubble
  * @returns {string|null}
  */
@@ -162,7 +184,7 @@ function extractText(bubble) {
     }
     const clone = translatable.cloneNode(true);
     clone.querySelectorAll(EMOJI_ELEMENT_SELECTORS.join(', ')).forEach(el => {
-      el.replaceWith(document.createTextNode(getEmojiMarker(el)));
+      el.replaceWith(document.createTextNode(getEmojiReplacement(el)));
     });
     // Strip Telegram's inline message timestamp so it isn't appended to content.
     clone.querySelectorAll(TIMESTAMP_SELECTORS.join(', ')).forEach(el => el.remove());

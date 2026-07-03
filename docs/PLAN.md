@@ -426,25 +426,29 @@ messages that were inserted during brief observer detachments without adding not
 
 ## 6. Content Extraction Rules
 
-### 6.1 Text Content — Emoji / Sticker Markers
+### 6.1 Text Content — Emoji / Sticker Handling
 
 Emoji are rendered as `<img class="emoji emoji-image" alt="💰">` inside `.translatable-message`.
 Public groups and channels also use `<custom-emoji-element>` and `<custom-emoji-renderer-element>`
-for stickers and custom emoji. These elements are replaced with markers so the extracted text
-still indicates where an emoji appeared.
+for stickers and custom emoji. These elements are replaced with either the raw default emoji
+character or a marker, so the extracted text still indicates where an emoji appeared.
 
-Marker rules:
-- `data-sticker-emoji` attribute → `{value}` (e.g. `{✨}`)
-- `alt` attribute → `{value}` (e.g. `{💰}`)
-- No usable attribute → `{}`
+Replacement rules:
+- If the candidate (`data-sticker-emoji`, `alt`, or inner `img[alt]`) is a single default
+  emoji grapheme (e.g. `💰`, `✨`), use it as-is.
+- Otherwise, wrap the candidate in braces (e.g. `{party-popper}`).
+- If no usable attribute exists, use `{}`.
 
 ```
 clone = translatable.cloneNode(true)
 clone.querySelectorAll('img.emoji, img.emoji-image, custom-emoji-element, custom-emoji-renderer-element')
   .forEach(el => {
-    marker = el.dataset.stickerEmoji?.trim() || el.alt?.trim() ||
-             el.querySelector('img[alt]')?.alt?.trim() || ''
-    el.replaceWith(document.createTextNode(marker ? `{${marker}}` : '{}'))
+    candidate = el.dataset.stickerEmoji?.trim() || el.alt?.trim() ||
+                el.querySelector('img[alt]')?.alt?.trim() || ''
+    if (isSingleDefaultEmojiGrapheme(candidate)) replacement = candidate
+    else if (candidate) replacement = `{${candidate}}`
+    else replacement = '{}'
+    el.replaceWith(document.createTextNode(replacement))
   })
 // Telegram interleaves a lot of wrapper whitespace around stickers/emoji; collapse runs
 // so the extracted text remains readable.
