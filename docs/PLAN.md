@@ -954,14 +954,18 @@ at least one term in each active filter).
 - Multiple chips match any of the listed names (case-insensitive substring).
 - Special keywords `admin`, `—`, or `-` match anonymous admin posts
   (`posterName == null && posterId == groupId`).
+- Chips are colored green when at least one visible row matches, and red when none
+  match.
 
 #### Content Terms
 
 - Input + Add button creates a filter chip.
-- Multiple chips match any of the listed terms.
-- **Match case**: when checked, comparison is case-sensitive.
-- **Match whole word**: when checked, each term must appear as a whole word
-  (`\bterm\b` regex). When unchecked, any substring match counts.
+- The **Match case** and **Match whole word** checkboxes set the options for the
+  next chip added; each chip stores its own options independently.
+- Chips display option badges: `Aa` for match-case, `W` for match-whole-word.
+- Chips are colored green when at least one visible row matches, and red when none
+  match, so users can see which terms are producing results.
+- Multiple chips match any of the listed terms (OR within the Content filter).
 
 ### 13.4 Session Filter Accordion
 

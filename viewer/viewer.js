@@ -44,8 +44,12 @@ let screenshotBlobUrls = new Map();
 let selectedSessionIds = new Set();
 /** @type {string[]} */
 let posterNameFilters = [];
-/** @type {string[]} */
+/**
+ * Content filters with per-term options.
+ * @type {Array<{term: string, matchCase: boolean, matchWord: boolean}>}
+ */
 let contentFilters = [];
+// Default options applied to the next content term added.
 let contentMatchCase = false;
 let contentMatchWord = false;
 /** @type {{ column: string|null, direction: 'asc'|'desc'|null }} */
@@ -168,21 +172,48 @@ function isAdminFilterKeyword(name) {
 
 /**
  * @param {object} record
+ * @param {string} term
+ * @returns {boolean}
+ */
+function matchesPosterNameTerm(record, term) {
+  const normalized = term.toLowerCase();
+  if (isAdminFilterKeyword(normalized)) {
+    return record.posterName == null && record.posterId === record.groupId;
+  }
+  const name = (record.posterName ?? '').toLowerCase();
+  return name.includes(normalized);
+}
+
+/**
+ * @param {object} record
  * @returns {boolean}
  */
 function matchesPosterNameFilters(record) {
   if (posterNameFilters.length === 0) return true;
+  return posterNameFilters.some(term => matchesPosterNameTerm(record, term));
+}
 
-  for (const term of posterNameFilters) {
-    const normalized = term.toLowerCase();
-    if (isAdminFilterKeyword(normalized)) {
-      if (record.posterName == null && record.posterId === record.groupId) return true;
-      continue;
-    }
-    const name = (record.posterName ?? '').toLowerCase();
-    if (name.includes(normalized)) return true;
+/**
+ * @param {object} record
+ * @param {{term: string, matchCase: boolean, matchWord: boolean}} filter
+ * @returns {boolean}
+ */
+function matchesContentFilter(record, filter) {
+  let text = record.content ?? '';
+  let term = filter.term;
+  if (!filter.matchCase) {
+    text = text.toLowerCase();
+    term = term.toLowerCase();
   }
-  return false;
+
+  if (filter.matchWord) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const flags = filter.matchCase ? '' : 'i';
+    const regex = new RegExp(`\\b${escaped}\\b`, flags);
+    return regex.test(text);
+  }
+
+  return text.includes(term);
 }
 
 /**
@@ -191,23 +222,7 @@ function matchesPosterNameFilters(record) {
  */
 function matchesContentFilters(record) {
   if (contentFilters.length === 0) return true;
-
-  let text = record.content ?? '';
-  if (!contentMatchCase) text = text.toLowerCase();
-
-  for (let term of contentFilters) {
-    if (!contentMatchCase) term = term.toLowerCase();
-
-    if (contentMatchWord) {
-      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const flags = contentMatchCase ? '' : 'i';
-      const regex = new RegExp(`\\b${escaped}\\b`, flags);
-      if (regex.test(text)) return true;
-    } else {
-      if (text.includes(term)) return true;
-    }
-  }
-  return false;
+  return contentFilters.some(filter => matchesContentFilter(record, filter));
 }
 
 function getVisibleMessages() {
@@ -343,14 +358,65 @@ function renderGroupInfo() {
 // Filters card
 // ---------------------------------------------------------------------------
 
-function renderChip(container, term, onRemove) {
+/**
+ * @param {HTMLElement} container
+ * @param {string} term
+ * @param {boolean} hasMatches
+ * @param {Function} onRemove
+ */
+function renderPosterNameChip(container, term, hasMatches, onRemove) {
   const chip = document.createElement('span');
-  chip.className = 'filter-chip';
+  chip.className = 'filter-chip' + (hasMatches ? ' has-matches' : ' no-matches');
 
   const label = document.createElement('span');
   label.className = 'filter-chip-label';
   label.textContent = term;
   chip.appendChild(label);
+
+  const remove = document.createElement('button');
+  remove.className = 'filter-chip-remove';
+  remove.textContent = '×';
+  remove.title = 'Remove filter';
+  remove.addEventListener('click', onRemove);
+  chip.appendChild(remove);
+
+  container.appendChild(chip);
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {{term: string, matchCase: boolean, matchWord: boolean}} filter
+ * @param {boolean} hasMatches
+ * @param {Function} onRemove
+ */
+function renderContentChip(container, filter, hasMatches, onRemove) {
+  const chip = document.createElement('span');
+  chip.className = 'filter-chip' + (hasMatches ? ' has-matches' : ' no-matches');
+
+  const label = document.createElement('span');
+  label.className = 'filter-chip-label';
+  label.textContent = filter.term;
+  chip.appendChild(label);
+
+  if (filter.matchCase || filter.matchWord) {
+    const badges = document.createElement('span');
+    badges.className = 'filter-chip-badges';
+    if (filter.matchCase) {
+      const badge = document.createElement('span');
+      badge.className = 'filter-chip-badge';
+      badge.title = 'Match case';
+      badge.textContent = 'Aa';
+      badges.appendChild(badge);
+    }
+    if (filter.matchWord) {
+      const badge = document.createElement('span');
+      badge.className = 'filter-chip-badge';
+      badge.title = 'Match whole word';
+      badge.textContent = 'W';
+      badges.appendChild(badge);
+    }
+    chip.appendChild(badges);
+  }
 
   const remove = document.createElement('button');
   remove.className = 'filter-chip-remove';
@@ -369,9 +435,13 @@ function renderFilters() {
   }
   els.filtersSection.classList.remove('hidden');
 
+  // Compute visible rows once so we can indicate which chips have matches.
+  const visible = getVisibleMessages();
+
   els.posterNameFilters.innerHTML = '';
   posterNameFilters.forEach((term, index) => {
-    renderChip(els.posterNameFilters, term, () => {
+    const hasMatches = visible.some(record => matchesPosterNameTerm(record, term));
+    renderPosterNameChip(els.posterNameFilters, term, hasMatches, () => {
       posterNameFilters.splice(index, 1);
       renderFilters();
       renderTable();
@@ -379,8 +449,9 @@ function renderFilters() {
   });
 
   els.contentFilters.innerHTML = '';
-  contentFilters.forEach((term, index) => {
-    renderChip(els.contentFilters, term, () => {
+  contentFilters.forEach((filter, index) => {
+    const hasMatches = visible.some(record => matchesContentFilter(record, filter));
+    renderContentChip(els.contentFilters, filter, hasMatches, () => {
       contentFilters.splice(index, 1);
       renderFilters();
       renderTable();
