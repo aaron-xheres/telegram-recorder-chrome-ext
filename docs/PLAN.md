@@ -934,7 +934,7 @@ Stop clicked:
 | Column | Sortable | Details |
 |---|---|---|
 | Timestamp | Yes — default DESC | Formatted to local time via `toLocaleString()` |
-| Session | Yes | ISO timestamp → local time; derived from session manifest |
+| Session | Yes | Raw session ID (Unix timestamp) |
 | Poster Name | Yes + multi-term filter | `—` when `null`; supports `admin` keyword for anonymous posts |
 | Poster ID | Yes | `—` when `null`; otherwise a clickable link to `https://web.telegram.org/k/#<posterId>` |
 | Message Content | No | Full text shown in-cell; not collapsible |
