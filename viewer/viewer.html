@@ -30,7 +30,17 @@
           <button id="select-all-sessions" class="button button-small">Select All</button>
           <button id="deselect-all-sessions" class="button button-small">Deselect All</button>
         </div>
-        <ul id="sessions-list" class="sessions-list"></ul>
+        <table id="sessions-table" class="sessions-table">
+          <thead>
+            <tr>
+              <th class="checkbox-col"></th>
+              <th>Session ID</th>
+              <th>Group Name</th>
+              <th>Messages</th>
+            </tr>
+          </thead>
+          <tbody id="sessions-table-body"></tbody>
+        </table>
       </div>
     </section>
 
