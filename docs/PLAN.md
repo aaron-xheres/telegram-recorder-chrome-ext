@@ -915,12 +915,12 @@ Stop clicked:
 │  [ Open Folder ]  [ Export CSV ]                                        │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  Filters                                                                 │
-│  Poster names  [ Add a poster name… ] [Add]   [chip] [chip] [x]        │
-│  ☑ Match case  ☑ Match whole word                                       │
 │  Poster IDs    [ Add a poster ID… ]   [Add]   [chip] [chip] [x]        │
+│  Poster names  [ Add a poster name… ] [Add]   [chip] [chip] [x]        │
 │  ☑ Match case  ☑ Match whole word                                       │
 │  Content terms [ Add a content term… ] [Add]  [chip] [chip] [x]        │
 │  ☑ Match case  ☑ Match whole word                                       │
+│  Must have     ☑ Screenshot  ☐ Link                                     │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  [▶ Sessions]  ← accordion, collapsed by default                        │
 ├──────────────────────────────────────────────────────────────────────────┤
@@ -951,6 +951,14 @@ The viewer provides three multi-term filters below the Filters heading. Terms wi
 filter are combined with OR; filters are combined with AND (a row must match at least
 one term in each active filter).
 
+#### Poster IDs
+
+- Input + Add button creates a filter chip.
+- Poster IDs are matched **exactly** against the recorded `posterId` (no substring,
+  no case/word options).
+- Multiple chips match any of the listed IDs (OR within the Poster ID filter).
+- Chips display match indicators but no option badges.
+
 #### Poster Names
 
 - Input + Add button creates a filter chip.
@@ -962,14 +970,6 @@ one term in each active filter).
 - Chips are colored green when at least one visible row matches, and red when none
   match.
 
-#### Poster IDs
-
-- Input + Add button creates a filter chip.
-- Poster IDs are matched **exactly** against the recorded `posterId` (no substring,
-  no case/word options).
-- Multiple chips match any of the listed IDs (OR within the Poster ID filter).
-- Chips display match indicators but no option badges.
-
 #### Content Terms
 
 - Input + Add button creates a filter chip.
@@ -979,6 +979,17 @@ one term in each active filter).
 - Chips are colored green when at least one visible row matches, and red when none
   match, so users can see which terms are producing results.
 - Multiple chips match any of the listed terms (OR within the Content filter).
+
+#### Must Have
+
+A separate section filters rows based on whether specific data exists:
+
+- **Screenshot** — when checked, only rows with a screenshot file are shown.
+  Checked by default.
+- **Link** — when checked, only rows with at least one extracted link are shown.
+
+If both are checked, rows must have both a screenshot and a link. If neither is
+checked, this section imposes no restriction.
 
 ### 13.4 Session Filter Accordion
 

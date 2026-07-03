@@ -38,6 +38,15 @@
       <h2>Filters</h2>
 
       <div class="filter-group">
+        <label>Poster IDs</label>
+        <div class="filter-input-row">
+          <input id="poster-id-input" type="search" placeholder="Add a poster ID…" autocomplete="off">
+          <button id="add-poster-id" type="button" class="button button-small">Add</button>
+        </div>
+        <div id="poster-id-filters" class="filter-chips"></div>
+      </div>
+
+      <div class="filter-group">
         <label>Poster names</label>
         <div class="filter-input-row">
           <input id="poster-name-input" type="search" placeholder="Add a poster name…" autocomplete="off">
@@ -51,15 +60,6 @@
       </div>
 
       <div class="filter-group">
-        <label>Poster IDs</label>
-        <div class="filter-input-row">
-          <input id="poster-id-input" type="search" placeholder="Add a poster ID…" autocomplete="off">
-          <button id="add-poster-id" type="button" class="button button-small">Add</button>
-        </div>
-        <div id="poster-id-filters" class="filter-chips"></div>
-      </div>
-
-      <div class="filter-group">
         <label>Content terms</label>
         <div class="filter-input-row">
           <input id="content-input" type="search" placeholder="Add a content term…" autocomplete="off">
@@ -70,6 +70,14 @@
           <label><input id="content-match-word" type="checkbox"> Match whole word</label>
         </div>
         <div id="content-filters" class="filter-chips"></div>
+      </div>
+
+      <div class="filter-group">
+        <label>Must have</label>
+        <div class="filter-options">
+          <label><input id="require-screenshot" type="checkbox" checked> Screenshot</label>
+          <label><input id="require-link" type="checkbox"> Link</label>
+        </div>
       </div>
     </section>
 
