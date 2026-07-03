@@ -8,6 +8,13 @@ const els = {
   posterNameInput: document.getElementById('poster-name-input'),
   addPosterName: document.getElementById('add-poster-name'),
   posterNameFilters: document.getElementById('poster-name-filters'),
+  posterNameMatchCase: document.getElementById('poster-name-match-case'),
+  posterNameMatchWord: document.getElementById('poster-name-match-word'),
+  posterIdInput: document.getElementById('poster-id-input'),
+  addPosterId: document.getElementById('add-poster-id'),
+  posterIdFilters: document.getElementById('poster-id-filters'),
+  posterIdMatchCase: document.getElementById('poster-id-match-case'),
+  posterIdMatchWord: document.getElementById('poster-id-match-word'),
   contentInput: document.getElementById('content-input'),
   addContent: document.getElementById('add-content'),
   contentFilters: document.getElementById('content-filters'),
@@ -42,8 +49,22 @@ let screenshotHandles = new Map();
 let screenshotBlobUrls = new Map();
 /** @type {Set<string>} */
 let selectedSessionIds = new Set();
-/** @type {string[]} */
+/**
+ * Poster name filters with per-term options.
+ * @type {Array<{term: string, matchCase: boolean, matchWord: boolean}>}
+ */
 let posterNameFilters = [];
+let posterNameMatchCase = false;
+let posterNameMatchWord = false;
+
+/**
+ * Poster ID filters with per-term options.
+ * @type {Array<{term: string, matchCase: boolean, matchWord: boolean}>}
+ */
+let posterIdFilters = [];
+let posterIdMatchCase = false;
+let posterIdMatchWord = false;
+
 /**
  * Content filters with per-term options.
  * @type {Array<{term: string, matchCase: boolean, matchWord: boolean}>}
@@ -171,17 +192,40 @@ function isAdminFilterKeyword(name) {
 }
 
 /**
- * @param {object} record
- * @param {string} term
+ * Generic string matcher for filter terms with case/word options.
+ * @param {string} text
+ * @param {{term: string, matchCase: boolean, matchWord: boolean}} filter
  * @returns {boolean}
  */
-function matchesPosterNameTerm(record, term) {
-  const normalized = term.toLowerCase();
-  if (isAdminFilterKeyword(normalized)) {
+function matchesTerm(text, filter) {
+  let haystack = text;
+  let needle = filter.term;
+  if (!filter.matchCase) {
+    haystack = haystack.toLowerCase();
+    needle = needle.toLowerCase();
+  }
+
+  if (filter.matchWord) {
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const flags = filter.matchCase ? '' : 'i';
+    const regex = new RegExp(`\\b${escaped}\\b`, flags);
+    return regex.test(haystack);
+  }
+
+  return haystack.includes(needle);
+}
+
+/**
+ * @param {object} record
+ * @param {{term: string, matchCase: boolean, matchWord: boolean}} filter
+ * @returns {boolean}
+ */
+function matchesPosterNameFilter(record, filter) {
+  const normalizedTerm = filter.term.toLowerCase();
+  if (isAdminFilterKeyword(normalizedTerm)) {
     return record.posterName == null && record.posterId === record.groupId;
   }
-  const name = (record.posterName ?? '').toLowerCase();
-  return name.includes(normalized);
+  return matchesTerm(record.posterName ?? '', filter);
 }
 
 /**
@@ -190,7 +234,25 @@ function matchesPosterNameTerm(record, term) {
  */
 function matchesPosterNameFilters(record) {
   if (posterNameFilters.length === 0) return true;
-  return posterNameFilters.some(term => matchesPosterNameTerm(record, term));
+  return posterNameFilters.some(filter => matchesPosterNameFilter(record, filter));
+}
+
+/**
+ * @param {object} record
+ * @param {{term: string, matchCase: boolean, matchWord: boolean}} filter
+ * @returns {boolean}
+ */
+function matchesPosterIdFilter(record, filter) {
+  return matchesTerm(record.posterId ?? '', filter);
+}
+
+/**
+ * @param {object} record
+ * @returns {boolean}
+ */
+function matchesPosterIdFilters(record) {
+  if (posterIdFilters.length === 0) return true;
+  return posterIdFilters.some(filter => matchesPosterIdFilter(record, filter));
 }
 
 /**
@@ -199,21 +261,7 @@ function matchesPosterNameFilters(record) {
  * @returns {boolean}
  */
 function matchesContentFilter(record, filter) {
-  let text = record.content ?? '';
-  let term = filter.term;
-  if (!filter.matchCase) {
-    text = text.toLowerCase();
-    term = term.toLowerCase();
-  }
-
-  if (filter.matchWord) {
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const flags = filter.matchCase ? '' : 'i';
-    const regex = new RegExp(`\\b${escaped}\\b`, flags);
-    return regex.test(text);
-  }
-
-  return text.includes(term);
+  return matchesTerm(record.content ?? '', filter);
 }
 
 /**
@@ -228,7 +276,7 @@ function matchesContentFilters(record) {
 function getVisibleMessages() {
   return messages.filter(record => {
     if (!selectedSessionIds.has(record.sessionId)) return false;
-    return matchesPosterNameFilters(record) && matchesContentFilters(record);
+    return matchesPosterNameFilters(record) && matchesPosterIdFilters(record) && matchesContentFilters(record);
   });
 }
 
@@ -360,36 +408,11 @@ function renderGroupInfo() {
 
 /**
  * @param {HTMLElement} container
- * @param {string} term
- * @param {boolean} hasMatches
- * @param {Function} onRemove
- */
-function renderPosterNameChip(container, term, hasMatches, onRemove) {
-  const chip = document.createElement('span');
-  chip.className = 'filter-chip' + (hasMatches ? ' has-matches' : ' no-matches');
-
-  const label = document.createElement('span');
-  label.className = 'filter-chip-label';
-  label.textContent = term;
-  chip.appendChild(label);
-
-  const remove = document.createElement('button');
-  remove.className = 'filter-chip-remove';
-  remove.textContent = '×';
-  remove.title = 'Remove filter';
-  remove.addEventListener('click', onRemove);
-  chip.appendChild(remove);
-
-  container.appendChild(chip);
-}
-
-/**
- * @param {HTMLElement} container
  * @param {{term: string, matchCase: boolean, matchWord: boolean}} filter
  * @param {boolean} hasMatches
  * @param {Function} onRemove
  */
-function renderContentChip(container, filter, hasMatches, onRemove) {
+function renderFilterChip(container, filter, hasMatches, onRemove) {
   const chip = document.createElement('span');
   chip.className = 'filter-chip' + (hasMatches ? ' has-matches' : ' no-matches');
 
@@ -439,10 +462,20 @@ function renderFilters() {
   const visible = getVisibleMessages();
 
   els.posterNameFilters.innerHTML = '';
-  posterNameFilters.forEach((term, index) => {
-    const hasMatches = visible.some(record => matchesPosterNameTerm(record, term));
-    renderPosterNameChip(els.posterNameFilters, term, hasMatches, () => {
+  posterNameFilters.forEach((filter, index) => {
+    const hasMatches = visible.some(record => matchesPosterNameFilter(record, filter));
+    renderFilterChip(els.posterNameFilters, filter, hasMatches, () => {
       posterNameFilters.splice(index, 1);
+      renderFilters();
+      renderTable();
+    });
+  });
+
+  els.posterIdFilters.innerHTML = '';
+  posterIdFilters.forEach((filter, index) => {
+    const hasMatches = visible.some(record => matchesPosterIdFilter(record, filter));
+    renderFilterChip(els.posterIdFilters, filter, hasMatches, () => {
+      posterIdFilters.splice(index, 1);
       renderFilters();
       renderTable();
     });
@@ -451,7 +484,7 @@ function renderFilters() {
   els.contentFilters.innerHTML = '';
   contentFilters.forEach((filter, index) => {
     const hasMatches = visible.some(record => matchesContentFilter(record, filter));
-    renderContentChip(els.contentFilters, filter, hasMatches, () => {
+    renderFilterChip(els.contentFilters, filter, hasMatches, () => {
       contentFilters.splice(index, 1);
       renderFilters();
       renderTable();
@@ -785,12 +818,39 @@ async function exportCsv() {
 function addPosterNameFilter() {
   const value = els.posterNameInput.value.trim();
   if (!value) return;
-  if (!posterNameFilters.includes(value)) {
-    posterNameFilters.push(value);
+  const filter = {
+    term: value,
+    matchCase: posterNameMatchCase,
+    matchWord: posterNameMatchWord
+  };
+  const exists = posterNameFilters.some(
+    f => f.term === filter.term && f.matchCase === filter.matchCase && f.matchWord === filter.matchWord
+  );
+  if (!exists) {
+    posterNameFilters.push(filter);
     renderFilters();
     renderTable();
   }
   els.posterNameInput.value = '';
+}
+
+function addPosterIdFilter() {
+  const value = els.posterIdInput.value.trim();
+  if (!value) return;
+  const filter = {
+    term: value,
+    matchCase: posterIdMatchCase,
+    matchWord: posterIdMatchWord
+  };
+  const exists = posterIdFilters.some(
+    f => f.term === filter.term && f.matchCase === filter.matchCase && f.matchWord === filter.matchWord
+  );
+  if (!exists) {
+    posterIdFilters.push(filter);
+    renderFilters();
+    renderTable();
+  }
+  els.posterIdInput.value = '';
 }
 
 function addContentFilter() {
@@ -822,6 +882,30 @@ els.posterNameInput.addEventListener('keydown', e => {
   }
 });
 
+els.posterNameMatchCase.addEventListener('change', () => {
+  posterNameMatchCase = els.posterNameMatchCase.checked;
+});
+
+els.posterNameMatchWord.addEventListener('change', () => {
+  posterNameMatchWord = els.posterNameMatchWord.checked;
+});
+
+els.addPosterId.addEventListener('click', addPosterIdFilter);
+els.posterIdInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addPosterIdFilter();
+  }
+});
+
+els.posterIdMatchCase.addEventListener('change', () => {
+  posterIdMatchCase = els.posterIdMatchCase.checked;
+});
+
+els.posterIdMatchWord.addEventListener('change', () => {
+  posterIdMatchWord = els.posterIdMatchWord.checked;
+});
+
 els.addContent.addEventListener('click', addContentFilter);
 els.contentInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
@@ -832,12 +916,10 @@ els.contentInput.addEventListener('keydown', e => {
 
 els.contentMatchCase.addEventListener('change', () => {
   contentMatchCase = els.contentMatchCase.checked;
-  renderTable();
 });
 
 els.contentMatchWord.addEventListener('change', () => {
   contentMatchWord = els.contentMatchWord.checked;
-  renderTable();
 });
 
 els.sessionsToggle.addEventListener('click', () => {

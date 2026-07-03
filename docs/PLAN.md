@@ -910,20 +910,23 @@ Stop clicked:
 ### 13.1 Layout
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Telegram Recorder — Viewer                                         │
-│  [ Open Folder ]  [ Export CSV ]                                   │
-├─────────────────────────────────────────────────────────────────────┤
-│  Filters                                                            │
-│  Poster names  [ Add a poster name… ] [Add]   [chip] [chip] [x]   │
-│  Content terms [ Add a content term… ] [Add]  [chip] [chip] [x]   │
-│  ☑ Match case  ☑ Match whole word                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│  [▶ Sessions]  ← accordion, collapsed by default                   │
-├─────────────────────────────────────────────────────────────────────┤
-│  Table (see columns below)                                          │
-│  ...                                                                │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Telegram Recorder — Viewer                                              │
+│  [ Open Folder ]  [ Export CSV ]                                        │
+├──────────────────────────────────────────────────────────────────────────┤
+│  Filters                                                                 │
+│  Poster names  [ Add a poster name… ] [Add]   [chip] [chip] [x]        │
+│  ☑ Match case  ☑ Match whole word                                       │
+│  Poster IDs    [ Add a poster ID… ]   [Add]   [chip] [chip] [x]        │
+│  ☑ Match case  ☑ Match whole word                                       │
+│  Content terms [ Add a content term… ] [Add]  [chip] [chip] [x]        │
+│  ☑ Match case  ☑ Match whole word                                       │
+├──────────────────────────────────────────────────────────────────────────┤
+│  [▶ Sessions]  ← accordion, collapsed by default                        │
+├──────────────────────────────────────────────────────────────────────────┤
+│  Table (see columns below)                                               │
+│  ...                                                                     │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 13.2 Table Columns
@@ -944,18 +947,28 @@ Sortable columns: click header once = ASC, again = DESC, third = reset to defaul
 
 ### 13.3 Message Filters
 
-The viewer provides two multi-term filters below the Filters heading. Terms within a
-filter are combined with OR; the two filters are combined with AND (a row must match
-at least one term in each active filter).
+The viewer provides three multi-term filters below the Filters heading. Terms within a
+filter are combined with OR; filters are combined with AND (a row must match at least
+one term in each active filter).
 
 #### Poster Names
 
 - Input + Add button creates a filter chip.
-- Multiple chips match any of the listed names (case-insensitive substring).
+- The **Match case** and **Match whole word** checkboxes set the options for the
+  next chip added; each chip stores its own options independently.
 - Special keywords `admin`, `—`, or `-` match anonymous admin posts
-  (`posterName == null && posterId == groupId`).
+  (`posterName == null && posterId == groupId`), regardless of case/word options.
+- Chips display option badges: `Aa` for match-case, `W` for match-whole-word.
 - Chips are colored green when at least one visible row matches, and red when none
   match.
+
+#### Poster IDs
+
+- Input + Add button creates a filter chip.
+- The **Match case** and **Match whole word** checkboxes set the options for the
+  next chip added; each chip stores its own options independently.
+- Multiple chips match any of the listed IDs (OR within the Poster ID filter).
+- Chips display option badges and match indicators the same way as Poster Names.
 
 #### Content Terms
 
