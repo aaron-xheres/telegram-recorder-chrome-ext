@@ -570,7 +570,7 @@ function renderTable() {
 
     tr.appendChild(createCell(formatTimestamp(record.timestamp)));
     tr.appendChild(createCell(getSessionLabel(record.sessionId)));
-    tr.appendChild(createCell(record.posterName ?? MISSING_FIELD));
+    tr.appendChild(createPosterNameCell(record.posterName));
     tr.appendChild(createIdCell(record.posterId));
     tr.appendChild(createContentCell(record.content));
     tr.appendChild(createImagesCell(record.images));
@@ -587,12 +587,20 @@ function createCell(text) {
   return td;
 }
 
+function createPosterNameCell(name) {
+  const td = document.createElement('td');
+  td.className = 'poster-name-cell';
+  td.textContent = name ?? MISSING_FIELD;
+  return td;
+}
+
 /**
  * Render a peer ID as a clickable link to the Telegram Web K page.
  * @param {string|null} peerId
  */
 function createIdCell(peerId) {
   const td = document.createElement('td');
+  td.className = 'poster-id-cell';
   if (!peerId) {
     td.textContent = MISSING_FIELD;
     return td;
