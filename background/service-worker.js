@@ -375,14 +375,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleAsync(
         (async () => {
           try {
-            // Capture requires the target window/tab to be visible. Focus it first
-            // so Chrome reliably returns a non-empty screenshot.
+            // Ensure the Telegram window/tab is visible before capturing.
+            // If the window is minimized, restore it first; then focus it and
+            // activate the tab. This is intrusive but better than losing the
+            // screenshot entirely.
             const windowId = sender.tab?.windowId;
             if (windowId) {
+              try {
+                const win = await chrome.windows.get(windowId);
+                if (win.state === 'minimized') {
+                  await chrome.windows.update(windowId, { state: 'normal' });
+                }
+              } catch (winErr) {
+                console.warn('[TelegramRecorder] could not inspect window state', windowId, winErr);
+              }
               await chrome.windows.update(windowId, { focused: true });
             }
             await chrome.tabs.update(tabId, { active: true });
-            await sleep(100);
+            await sleep(150);
 
             const fullDataUrl = await captureVisibleTabWithRetry(windowId);
             return { ok: true, fullDataUrl };
