@@ -939,7 +939,7 @@ Stop clicked:
 | Poster Name | Yes + multi-term filter | `—` when `null`; supports `admin` keyword for anonymous posts |
 | Poster ID | Yes | `—` when `null`; otherwise a clickable link to `https://web.telegram.org/k/#<posterId>` |
 | Message Content | No | Full text shown in-cell; not collapsible |
-| Images | No | Count badge (e.g. "2 images"); click to show blob URLs list |
+| Images | No | Count label + each blob URL rendered as clickable anchor; stacked vertically |
 | Links | No | Each `href` rendered as clickable anchor; stacked vertically |
 | Screenshot | No | Thumbnail max 80px height; click → lightbox overlay |
 
