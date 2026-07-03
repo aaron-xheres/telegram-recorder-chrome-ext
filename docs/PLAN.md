@@ -450,9 +450,13 @@ clone.querySelectorAll('img.emoji, img.emoji-image, custom-emoji-element, custom
     else replacement = '{}'
     el.replaceWith(document.createTextNode(replacement))
   })
-// Telegram interleaves a lot of wrapper whitespace around stickers/emoji; collapse runs
-// so the extracted text remains readable.
-content = clone.textContent.replace(/\s+/g, ' ').trim()
+// Telegram interleaves a lot of wrapper whitespace around stickers/emoji.
+// Preserve intentional line breaks for the viewer, but collapse runs of
+// spaces/tabs and multiple blank lines.
+content = clone.textContent
+  .replace(/[ \t]+/g, ' ')
+  .replace(/\n+/g, '\n')
+  .trim()
 // Browser decodes HTML entities (&amp; → &) automatically via textContent
 ```
 

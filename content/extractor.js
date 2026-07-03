@@ -188,9 +188,13 @@ function extractText(bubble) {
     });
     // Strip Telegram's inline message timestamp so it isn't appended to content.
     clone.querySelectorAll(TIMESTAMP_SELECTORS.join(', ')).forEach(el => el.remove());
-    // Telegram interleaves a lot of custom-emoji/sticker whitespace; collapse runs
-    // so the extracted text remains readable and line counts don't explode.
-    return clone.textContent.replace(/\s+/g, ' ').trim();
+    // Telegram interleaves a lot of custom-emoji/sticker whitespace. Preserve
+    // intentional line breaks for the viewer, but collapse runs of spaces/tabs
+    // and multiple blank lines so the text stays readable.
+    return clone.textContent
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n+/g, '\n')
+      .trim();
   } catch (err) {
     console.error('[TelegramRecorder] extractText failed', err);
     return null;
