@@ -357,24 +357,24 @@ body {
 }
 
 .content-cell {
-  min-width: 300px;
-  max-width: 650px;
+  min-width: 18rem;
+  max-width: 40rem;
 }
 
 .poster-name-cell {
-  max-width: 130px;
+  max-width: 8rem;
   word-break: break-word;
 }
 
 .poster-id-cell {
-  min-width: 240px;
-  max-width: 320px;
+  min-width: 15rem;
+  max-width: 20rem;
   word-break: break-all;
 }
 
 .images-cell,
 .links-cell {
-  min-width: 140px;
+  min-width: 9rem;
 }
 
 .content-text {
