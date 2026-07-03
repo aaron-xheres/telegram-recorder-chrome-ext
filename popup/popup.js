@@ -262,13 +262,18 @@ async function init() {
 init().catch(err => console.error('[TelegramRecorder] popup init failed', err));
 
 // Listen for runtime messages (e.g. AUTO_STOPPED from background).
+// Only respond to messages the popup actually handles; other messages (like
+// CAPTURE_TAB replies from the service worker) must be left for their intended
+// recipient, otherwise the popup's generic {ok: true} reply can be received
+// instead of the real response.
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === POPUP_MSG.AUTO_STOPPED) {
     fetchActiveSessions().then(() => {
       setVisible(els.autoStopNotice, true);
       render();
     });
+    sendResponse({ ok: true });
+    return false;
   }
-  sendResponse({ ok: true });
   return false;
 });

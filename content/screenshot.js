@@ -125,6 +125,13 @@ async function captureScreenshot(bubble) {
 
     const dpr = window.devicePixelRatio || 1;
 
+    console.log('[TelegramRecorder] requesting capture', {
+      bubbleRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      visibleRect: { x: visibleRect.x, y: visibleRect.y, width: visibleRect.width, height: visibleRect.height },
+      dpr,
+      viewport: { width: window.innerWidth, height: window.innerHeight }
+    });
+
     // The service worker focuses the tab and retries the capture internally.
     // We only retry here if the message channel itself is temporarily unavailable.
     let response;
@@ -135,6 +142,13 @@ async function captureScreenshot(bubble) {
       await sleep(200);
       response = await chrome.runtime.sendMessage({ type: SCREENSHOT_MSG.CAPTURE_TAB });
     }
+
+    console.log('[TelegramRecorder] CAPTURE_TAB response', {
+      ok: response?.ok,
+      hasFullDataUrl: Boolean(response?.fullDataUrl),
+      fullDataUrlLength: response?.fullDataUrl?.length,
+      error: response?.error
+    });
 
     if (!response || !response.ok || !response.fullDataUrl) {
       console.error('[TelegramRecorder] CAPTURE_TAB failed', response);

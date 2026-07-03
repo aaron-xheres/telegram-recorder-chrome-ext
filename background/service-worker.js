@@ -202,12 +202,14 @@ async function captureVisibleTabWithRetry(windowId) {
   let lastErr;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
+      console.log('[TelegramRecorder] captureVisibleTab attempt', attempt, { windowId });
       let fullDataUrl;
       if (windowId) {
         fullDataUrl = await chrome.tabs.captureVisibleTab(windowId, options);
       } else {
         fullDataUrl = await chrome.tabs.captureVisibleTab(options);
       }
+      console.log('[TelegramRecorder] captureVisibleTab result', { attempt, type: typeof fullDataUrl, length: fullDataUrl?.length });
       if (!fullDataUrl) {
         throw new Error('captureVisibleTab returned empty data URL');
       }
@@ -380,10 +382,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             // activate the tab. This is intrusive but better than losing the
             // screenshot entirely.
             const windowId = sender.tab?.windowId;
+            console.log('[TelegramRecorder] CAPTURE_TAB start', { tabId, windowId });
             if (windowId) {
               try {
                 const win = await chrome.windows.get(windowId);
+                console.log('[TelegramRecorder] window state', { windowId, state: win.state });
                 if (win.state === 'minimized') {
+                  console.log('[TelegramRecorder] restoring minimized window', windowId);
                   await chrome.windows.update(windowId, { state: 'normal' });
                 }
               } catch (winErr) {
@@ -392,9 +397,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               await chrome.windows.update(windowId, { focused: true });
             }
             await chrome.tabs.update(tabId, { active: true });
+            console.log('[TelegramRecorder] tab activated', tabId);
             await sleep(150);
 
             const fullDataUrl = await captureVisibleTabWithRetry(windowId);
+            console.log('[TelegramRecorder] capture success', { tabId, dataUrlLength: fullDataUrl?.length });
             return { ok: true, fullDataUrl };
           } catch (err) {
             console.error('[TelegramRecorder] CAPTURE_TAB failed for tab', tabId, err);
