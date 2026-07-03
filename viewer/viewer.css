@@ -292,8 +292,12 @@ body {
   font-weight: 600;
 }
 
+.sessions-table tbody tr:hover {
+  background: #f9fafb;
+}
+
 .sessions-table .checkbox-col {
-  width: 1.5rem;
+  width: 2rem;
   padding-left: 8px;
   padding-right: 0;
   text-align: center;
