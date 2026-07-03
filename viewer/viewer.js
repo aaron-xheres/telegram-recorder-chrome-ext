@@ -18,6 +18,8 @@ const els = {
   contentFilters: document.getElementById('content-filters'),
   contentMatchCase: document.getElementById('content-match-case'),
   contentMatchWord: document.getElementById('content-match-word'),
+  requireScreenshot: document.getElementById('require-screenshot'),
+  requireLink: document.getElementById('require-link'),
   groupInfo: document.getElementById('group-info'),
   groupList: document.getElementById('group-list'),
   sessionsSection: document.getElementById('sessions-section'),
@@ -69,6 +71,8 @@ let contentFilters = [];
 // Default options applied to the next content term added.
 let contentMatchCase = false;
 let contentMatchWord = false;
+let requireScreenshot = true;
+let requireLink = false;
 /** @type {{ column: string|null, direction: 'asc'|'desc'|null }} */
 let sortState = { column: 'timestamp', direction: 'desc' };
 
@@ -269,10 +273,23 @@ function matchesContentFilters(record) {
   return contentFilters.some(filter => matchesContentFilter(record, filter));
 }
 
+function hasScreenshot(record) {
+  return Boolean(screenshotHandles.has(record.messageId));
+}
+
+function hasLink(record) {
+  return Array.isArray(record.links) && record.links.length > 0;
+}
+
 function getVisibleMessages() {
   return messages.filter(record => {
     if (!selectedSessionIds.has(record.sessionId)) return false;
-    return matchesPosterNameFilters(record) && matchesPosterIdFilters(record) && matchesContentFilters(record);
+    if (!matchesPosterNameFilters(record)) return false;
+    if (!matchesPosterIdFilters(record)) return false;
+    if (!matchesContentFilters(record)) return false;
+    if (requireScreenshot && !hasScreenshot(record)) return false;
+    if (requireLink && !hasLink(record)) return false;
+    return true;
   });
 }
 
@@ -906,6 +923,18 @@ els.contentMatchCase.addEventListener('change', () => {
 
 els.contentMatchWord.addEventListener('change', () => {
   contentMatchWord = els.contentMatchWord.checked;
+});
+
+els.requireScreenshot.addEventListener('change', () => {
+  requireScreenshot = els.requireScreenshot.checked;
+  renderFilters();
+  renderTable();
+});
+
+els.requireLink.addEventListener('change', () => {
+  requireLink = els.requireLink.checked;
+  renderFilters();
+  renderTable();
 });
 
 els.sessionsToggle.addEventListener('click', () => {
