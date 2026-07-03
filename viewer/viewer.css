@@ -106,25 +106,85 @@ body {
   margin-bottom: 6px;
 }
 
-.filter-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+.filter-group {
+  margin-bottom: 16px;
 }
 
-.filter-row label {
+.filter-group > label {
+  display: block;
   font-size: 13px;
   font-weight: 500;
   color: #374151;
+  margin-bottom: 6px;
 }
 
-.filter-row input {
+.filter-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.filter-input-row input {
   padding: 6px 10px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   font-size: 13px;
   min-width: 220px;
+  flex: 1;
+}
+
+.filter-options {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.filter-options label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #374151;
+}
+
+.filter-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #9ca3af;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.filter-chip-remove:hover {
+  background: #6b7280;
 }
 
 .button {

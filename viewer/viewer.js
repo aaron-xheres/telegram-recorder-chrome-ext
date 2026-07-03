@@ -5,7 +5,14 @@
 const els = {
   openFolder: document.getElementById('open-folder'),
   exportCsv: document.getElementById('export-csv'),
-  nameSearch: document.getElementById('name-search'),
+  posterNameInput: document.getElementById('poster-name-input'),
+  addPosterName: document.getElementById('add-poster-name'),
+  posterNameFilters: document.getElementById('poster-name-filters'),
+  contentInput: document.getElementById('content-input'),
+  addContent: document.getElementById('add-content'),
+  contentFilters: document.getElementById('content-filters'),
+  contentMatchCase: document.getElementById('content-match-case'),
+  contentMatchWord: document.getElementById('content-match-word'),
   groupInfo: document.getElementById('group-info'),
   groupList: document.getElementById('group-list'),
   sessionsSection: document.getElementById('sessions-section'),
@@ -35,6 +42,12 @@ let screenshotHandles = new Map();
 let screenshotBlobUrls = new Map();
 /** @type {Set<string>} */
 let selectedSessionIds = new Set();
+/** @type {string[]} */
+let posterNameFilters = [];
+/** @type {string[]} */
+let contentFilters = [];
+let contentMatchCase = false;
+let contentMatchWord = false;
 /** @type {{ column: string|null, direction: 'asc'|'desc'|null }} */
 let sortState = { column: 'timestamp', direction: 'desc' };
 
@@ -145,20 +158,62 @@ function getGroupName(sessionId) {
 // Filtering
 // ---------------------------------------------------------------------------
 
-function getVisibleMessages() {
-  const search = els.nameSearch.value.trim().toLowerCase();
+/**
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isAdminFilterKeyword(name) {
+  return name === 'admin' || name === '—' || name === '-';
+}
 
+/**
+ * @param {object} record
+ * @returns {boolean}
+ */
+function matchesPosterNameFilters(record) {
+  if (posterNameFilters.length === 0) return true;
+
+  for (const term of posterNameFilters) {
+    const normalized = term.toLowerCase();
+    if (isAdminFilterKeyword(normalized)) {
+      if (record.posterName == null && record.posterId === record.groupId) return true;
+      continue;
+    }
+    const name = (record.posterName ?? '').toLowerCase();
+    if (name.includes(normalized)) return true;
+  }
+  return false;
+}
+
+/**
+ * @param {object} record
+ * @returns {boolean}
+ */
+function matchesContentFilters(record) {
+  if (contentFilters.length === 0) return true;
+
+  let text = record.content ?? '';
+  if (!contentMatchCase) text = text.toLowerCase();
+
+  for (let term of contentFilters) {
+    if (!contentMatchCase) term = term.toLowerCase();
+
+    if (contentMatchWord) {
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const flags = contentMatchCase ? '' : 'i';
+      const regex = new RegExp(`\\b${escaped}\\b`, flags);
+      if (regex.test(text)) return true;
+    } else {
+      if (text.includes(term)) return true;
+    }
+  }
+  return false;
+}
+
+function getVisibleMessages() {
   return messages.filter(record => {
     if (!selectedSessionIds.has(record.sessionId)) return false;
-    if (!search) return true;
-
-    // Special keyword: filter anonymous admin posts (posterName null, posterId == groupId).
-    if (search === 'admin' || search === '—' || search === '-') {
-      return record.posterName == null && record.posterId === record.groupId;
-    }
-
-    const name = record.posterName ?? '';
-    return name.toLowerCase().includes(search);
+    return matchesPosterNameFilters(record) && matchesContentFilters(record);
   });
 }
 
@@ -288,12 +343,49 @@ function renderGroupInfo() {
 // Filters card
 // ---------------------------------------------------------------------------
 
+function renderChip(container, term, onRemove) {
+  const chip = document.createElement('span');
+  chip.className = 'filter-chip';
+
+  const label = document.createElement('span');
+  label.className = 'filter-chip-label';
+  label.textContent = term;
+  chip.appendChild(label);
+
+  const remove = document.createElement('button');
+  remove.className = 'filter-chip-remove';
+  remove.textContent = '×';
+  remove.title = 'Remove filter';
+  remove.addEventListener('click', onRemove);
+  chip.appendChild(remove);
+
+  container.appendChild(chip);
+}
+
 function renderFilters() {
   if (messages.length === 0) {
     els.filtersSection.classList.add('hidden');
     return;
   }
   els.filtersSection.classList.remove('hidden');
+
+  els.posterNameFilters.innerHTML = '';
+  posterNameFilters.forEach((term, index) => {
+    renderChip(els.posterNameFilters, term, () => {
+      posterNameFilters.splice(index, 1);
+      renderFilters();
+      renderTable();
+    });
+  });
+
+  els.contentFilters.innerHTML = '';
+  contentFilters.forEach((term, index) => {
+    renderChip(els.contentFilters, term, () => {
+      contentFilters.splice(index, 1);
+      renderFilters();
+      renderTable();
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -619,9 +711,53 @@ async function exportCsv() {
 // Event wiring
 // ---------------------------------------------------------------------------
 
+function addPosterNameFilter() {
+  const value = els.posterNameInput.value.trim();
+  if (!value) return;
+  if (!posterNameFilters.includes(value)) {
+    posterNameFilters.push(value);
+    renderFilters();
+    renderTable();
+  }
+  els.posterNameInput.value = '';
+}
+
+function addContentFilter() {
+  const value = els.contentInput.value.trim();
+  if (!value) return;
+  if (!contentFilters.includes(value)) {
+    contentFilters.push(value);
+    renderFilters();
+    renderTable();
+  }
+  els.contentInput.value = '';
+}
+
 els.openFolder.addEventListener('click', openFolder);
 
-els.nameSearch.addEventListener('input', () => {
+els.addPosterName.addEventListener('click', addPosterNameFilter);
+els.posterNameInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addPosterNameFilter();
+  }
+});
+
+els.addContent.addEventListener('click', addContentFilter);
+els.contentInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addContentFilter();
+  }
+});
+
+els.contentMatchCase.addEventListener('change', () => {
+  contentMatchCase = els.contentMatchCase.checked;
+  renderTable();
+});
+
+els.contentMatchWord.addEventListener('change', () => {
+  contentMatchWord = els.contentMatchWord.checked;
   renderTable();
 });
 

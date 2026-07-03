@@ -910,15 +910,20 @@ Stop clicked:
 ### 13.1 Layout
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  Telegram Recorder — Viewer                                  │
-│  [ Open Folder ]  [ Export CSV ]      Search: [           ] │
-├──────────────────────────────────────────────────────────────┤
-│  [▶ Sessions]  ← accordion, collapsed by default            │
-├──────────────────────────────────────────────────────────────┤
-│  Table (see columns below)                                   │
-│  ...                                                         │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  Telegram Recorder — Viewer                                         │
+│  [ Open Folder ]  [ Export CSV ]                                   │
+├─────────────────────────────────────────────────────────────────────┤
+│  Filters                                                            │
+│  Poster names  [ Add a poster name… ] [Add]   [chip] [chip] [x]   │
+│  Content terms [ Add a content term… ] [Add]  [chip] [chip] [x]   │
+│  ☑ Match case  ☑ Match whole word                                 │
+├─────────────────────────────────────────────────────────────────────┤
+│  [▶ Sessions]  ← accordion, collapsed by default                   │
+├─────────────────────────────────────────────────────────────────────┤
+│  Table (see columns below)                                          │
+│  ...                                                                │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 13.2 Table Columns
@@ -928,7 +933,7 @@ Stop clicked:
 | Timestamp | Yes — default DESC | Formatted to local time via `toLocaleString()` |
 | Session | Yes | ISO timestamp → local time; derived from session manifest |
 | Group | Yes | Group name from session manifest |
-| Poster Name | Yes + text search | `—` when `null` |
+| Poster Name | Yes + multi-term filter | `—` when `null`; supports `admin` keyword for anonymous posts |
 | Poster ID | Yes | `—` when `null`; otherwise a clickable link to `https://web.telegram.org/k/#<posterId>` |
 | Message Content | No | Full text shown by default; click to collapse/expand in-cell |
 | Images | No | Count badge (e.g. "2 images"); click to show blob URLs list |
@@ -937,7 +942,28 @@ Stop clicked:
 
 Sortable columns: click header once = ASC, again = DESC, third = reset to default.
 
-### 13.3 Session Filter Accordion
+### 13.3 Message Filters
+
+The viewer provides two multi-term filters below the Filters heading. Terms within a
+filter are combined with OR; the two filters are combined with AND (a row must match
+at least one term in each active filter).
+
+#### Poster Names
+
+- Input + Add button creates a filter chip.
+- Multiple chips match any of the listed names (case-insensitive substring).
+- Special keywords `admin`, `—`, or `-` match anonymous admin posts
+  (`posterName == null && posterId == groupId`).
+
+#### Content Terms
+
+- Input + Add button creates a filter chip.
+- Multiple chips match any of the listed terms.
+- **Match case**: when checked, comparison is case-sensitive.
+- **Match whole word**: when checked, each term must appear as a whole word
+  (`\bterm\b` regex). When unchecked, any substring match counts.
+
+### 13.4 Session Filter Accordion
 
 ```
 [▶ Sessions]   ← click to expand/collapse
@@ -952,16 +978,16 @@ Sortable columns: click header once = ASC, again = DESC, third = reset to defaul
 - Unchecking hides matching rows in real-time (no reload)
 - Select/Deselect All operates on all visible checkboxes
 
-### 13.4 Screenshot Lightbox
+### 13.5 Screenshot Lightbox
 
 - Click thumbnail → full-size image shown in overlay
 - Overlay: semi-transparent dark background, centered image, click outside to close
 - Image loaded via `URL.createObjectURL(await fileHandle.getFile())`
 - All blob URLs revoked on `window.beforeunload`
 
-### 13.5 CSV Export
+### 13.6 CSV Export
 
-Export applies to currently **visible rows** (respects session filter + name search).
+Export applies to currently **visible rows** (respects session filter + message filters).
 
 **Column mapping:**
 
