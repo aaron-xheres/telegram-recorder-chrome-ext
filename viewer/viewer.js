@@ -569,7 +569,7 @@ function renderTable() {
     const tr = document.createElement('tr');
 
     tr.appendChild(createCell(formatTimestamp(record.timestamp)));
-    tr.appendChild(createCell(getSessionLabel(record.sessionId)));
+    tr.appendChild(createCell(record.sessionId));
     tr.appendChild(createPosterNameCell(record.posterName));
     tr.appendChild(createIdCell(record.posterId));
     tr.appendChild(createContentCell(record.content));

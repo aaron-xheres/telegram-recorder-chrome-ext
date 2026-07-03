@@ -362,13 +362,14 @@ body {
 }
 
 .poster-name-cell {
-  max-width: 8rem;
+  min-width: 8rem;
+  max-width: 10rem;
   word-break: break-word;
 }
 
 .poster-id-cell {
-  min-width: 15rem;
-  max-width: 20rem;
+  min-width: 8rem;
+  max-width: 10rem;
   word-break: break-all;
 }
 
