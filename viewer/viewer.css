@@ -357,7 +357,8 @@ body {
 }
 
 .content-cell {
-  max-width: 300px;
+  min-width: 350px;
+  max-width: 800px;
 }
 
 .content-text {
