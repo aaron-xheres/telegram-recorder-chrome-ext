@@ -653,6 +653,10 @@ function createLinksCell(links) {
     td.textContent = MISSING_FIELD;
     return td;
   }
+  const count = document.createElement('div');
+  count.className = 'link-count';
+  count.textContent = `${links.length} link${links.length === 1 ? '' : 's'}`;
+  td.appendChild(count);
   for (const url of links) {
     const a = document.createElement('a');
     a.href = url;

@@ -375,6 +375,12 @@ body {
   text-decoration: underline;
 }
 
+.links-cell .link-count {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
 .links-cell a {
   display: block;
   margin-bottom: 2px;
