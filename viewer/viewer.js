@@ -13,8 +13,6 @@ const els = {
   posterIdInput: document.getElementById('poster-id-input'),
   addPosterId: document.getElementById('add-poster-id'),
   posterIdFilters: document.getElementById('poster-id-filters'),
-  posterIdMatchCase: document.getElementById('poster-id-match-case'),
-  posterIdMatchWord: document.getElementById('poster-id-match-word'),
   contentInput: document.getElementById('content-input'),
   addContent: document.getElementById('add-content'),
   contentFilters: document.getElementById('content-filters'),
@@ -58,12 +56,10 @@ let posterNameMatchCase = false;
 let posterNameMatchWord = false;
 
 /**
- * Poster ID filters with per-term options.
+ * Poster ID filters. Poster IDs are matched exactly, so options are always false.
  * @type {Array<{term: string, matchCase: boolean, matchWord: boolean}>}
  */
 let posterIdFilters = [];
-let posterIdMatchCase = false;
-let posterIdMatchWord = false;
 
 /**
  * Content filters with per-term options.
@@ -243,7 +239,7 @@ function matchesPosterNameFilters(record) {
  * @returns {boolean}
  */
 function matchesPosterIdFilter(record, filter) {
-  return matchesTerm(record.posterId ?? '', filter);
+  return String(record.posterId ?? '') === filter.term;
 }
 
 /**
@@ -839,12 +835,10 @@ function addPosterIdFilter() {
   if (!value) return;
   const filter = {
     term: value,
-    matchCase: posterIdMatchCase,
-    matchWord: posterIdMatchWord
+    matchCase: false,
+    matchWord: false
   };
-  const exists = posterIdFilters.some(
-    f => f.term === filter.term && f.matchCase === filter.matchCase && f.matchWord === filter.matchWord
-  );
+  const exists = posterIdFilters.some(f => f.term === filter.term);
   if (!exists) {
     posterIdFilters.push(filter);
     renderFilters();
@@ -896,14 +890,6 @@ els.posterIdInput.addEventListener('keydown', e => {
     e.preventDefault();
     addPosterIdFilter();
   }
-});
-
-els.posterIdMatchCase.addEventListener('change', () => {
-  posterIdMatchCase = els.posterIdMatchCase.checked;
-});
-
-els.posterIdMatchWord.addEventListener('change', () => {
-  posterIdMatchWord = els.posterIdMatchWord.checked;
 });
 
 els.addContent.addEventListener('click', addContentFilter);

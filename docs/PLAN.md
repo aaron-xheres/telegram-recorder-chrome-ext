@@ -965,10 +965,10 @@ one term in each active filter).
 #### Poster IDs
 
 - Input + Add button creates a filter chip.
-- The **Match case** and **Match whole word** checkboxes set the options for the
-  next chip added; each chip stores its own options independently.
+- Poster IDs are matched **exactly** against the recorded `posterId` (no substring,
+  no case/word options).
 - Multiple chips match any of the listed IDs (OR within the Poster ID filter).
-- Chips display option badges and match indicators the same way as Poster Names.
+- Chips display match indicators but no option badges.
 
 #### Content Terms
 
