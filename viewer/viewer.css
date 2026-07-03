@@ -299,6 +299,11 @@ body {
   text-align: center;
 }
 
+.sessions-table .session-id-col {
+  width: 15rem;
+  max-width: 15rem;
+}
+
 .empty-state {
   padding: 40px 20px;
   text-align: center;
