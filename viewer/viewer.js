@@ -540,6 +540,7 @@ function renderSessionsAccordion() {
     tr.appendChild(checkboxTd);
 
     const idTd = document.createElement('td');
+    idTd.className = 'session-id-col';
     idTd.textContent = session.id;
     tr.appendChild(idTd);
 
