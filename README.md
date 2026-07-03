@@ -36,9 +36,9 @@ A Chrome extension that records messages from **Telegram Web K** (`web.telegram.
 1. Open [Telegram Web K](https://web.telegram.org/k/) in Chrome.
 2. Open the group chat you want to record.
 3. Click the extension icon and press **▶ Start Recording**.
-4. A session manifest and future messages will be saved to:
+4. A session manifest and future messages will be saved to your browser's default downloads folder:
    ```
-   ~/Downloads/telegram-recorder/{group-id}/
+   ~/{Default Downloads}/telegram-recorder/{group-id}/
    ```
 5. Click **■ Stop Recording** when finished.
 
