@@ -378,7 +378,8 @@ function renderGroupInfo() {
   list.innerHTML = '';
 
   for (const groupId of groupIds) {
-    const session = Array.from(sessions.values()).find(s => s.groupId === groupId);
+    const groupSessions = Array.from(sessions.values()).filter(s => s.groupId === groupId);
+    const session = groupSessions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
     const groupName = session?.groupName ?? MISSING_FIELD;
 
     const li = document.createElement('li');
