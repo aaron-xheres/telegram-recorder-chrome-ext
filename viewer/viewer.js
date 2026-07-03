@@ -316,10 +316,6 @@ function sortMessages() {
         va = getSessionLabel(a.sessionId);
         vb = getSessionLabel(b.sessionId);
         break;
-      case 'group':
-        va = getGroupName(a.sessionId);
-        vb = getGroupName(b.sessionId);
-        break;
       case 'posterName':
         va = a.posterName ?? '';
         vb = b.posterName ?? '';
@@ -574,7 +570,6 @@ function renderTable() {
 
     tr.appendChild(createCell(formatTimestamp(record.timestamp)));
     tr.appendChild(createCell(getSessionLabel(record.sessionId)));
-    tr.appendChild(createCell(getGroupName(record.sessionId)));
     tr.appendChild(createCell(record.posterName ?? MISSING_FIELD));
     tr.appendChild(createIdCell(record.posterId));
     tr.appendChild(createContentCell(record.content));
