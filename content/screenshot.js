@@ -135,13 +135,7 @@ async function captureScreenshotCanvas(bubble) {
       allowTaint: true,
       scale: window.devicePixelRatio || 1,
       backgroundColor: null,
-      logging: false,
-      x: 0,
-      y: 0,
-      width: rect.width,
-      height: Math.min(rect.height, viewportHeight),
-      windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight
+      logging: false
     });
 
     return canvas.toDataURL('image/png');
