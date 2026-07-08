@@ -19,7 +19,8 @@ const els = {
   startButton: document.getElementById('start-button'),
   stopButton: document.getElementById('stop-button'),
   viewerButton: document.getElementById('viewer-button'),
-  canvasCapture: document.getElementById('canvas-capture')
+  canvasCapture: document.getElementById('canvas-capture'),
+  downloadMedia: document.getElementById('download-media')
 };
 
 // Current popup state.
@@ -263,6 +264,14 @@ els.canvasCapture.addEventListener('change', async () => {
   }
 });
 
+els.downloadMedia.addEventListener('change', async () => {
+  try {
+    await chrome.storage.local.set({ downloadMedia: els.downloadMedia.checked });
+  } catch (err) {
+    console.error('[TelegramRecorder] failed to save download media setting', err);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
@@ -275,11 +284,13 @@ async function init() {
   await fetchActiveSessions();
 
   try {
-    const storage = await chrome.storage.local.get('useCanvasCapture');
+    const storage = await chrome.storage.local.get(['useCanvasCapture', 'downloadMedia']);
     els.canvasCapture.checked = storage.useCanvasCapture !== false;
+    els.downloadMedia.checked = storage.downloadMedia !== false;
   } catch (err) {
-    console.error('[TelegramRecorder] failed to load canvas capture setting', err);
+    console.error('[TelegramRecorder] failed to load settings', err);
     els.canvasCapture.checked = true;
+    els.downloadMedia.checked = true;
   }
 
   render();

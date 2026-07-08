@@ -184,6 +184,31 @@ async function saveFiles(messageData, croppedDataUrl) {
 }
 
 /**
+ * Download a media Blob into the group's media/ folder.
+ * @param {string} groupId
+ * @param {string} filename
+ * @param {Blob} blob
+ */
+async function saveMediaBlob(groupId, filename, blob) {
+  if (!groupId || !filename || !blob) {
+    throw new Error('Missing groupId, filename, or blob');
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    await chrome.downloads.download({
+      url: objectUrl,
+      filename: `telegram-recorder/${groupId}/media/${filename}`,
+      saveAs: false
+    });
+  } finally {
+    // Give Chrome a moment to start the download before revoking the object URL.
+    await sleep(1000);
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/**
  * @param {number} ms
  * @returns {Promise<void>}
  */
@@ -412,6 +437,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         })()
       );
       return true; // keep channel open for async response
+    }
+
+    case MSG.DOWNLOAD_MEDIA: {
+      const { groupId, filename, blob } = message;
+      if (!groupId || !filename || !blob) {
+        sendResponse({ ok: false, error: 'Missing groupId, filename, or blob' });
+        break;
+      }
+      handleAsync(
+        saveMediaBlob(groupId, filename, blob)
+          .then(() => ({ ok: true }))
+      );
+      return true;
     }
 
     case MSG.SAVE_FILES: {
