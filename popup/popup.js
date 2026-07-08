@@ -48,28 +48,6 @@ function isWebAorZ(url) {
   return url && (url.startsWith('https://web.telegram.org/a/') || url.startsWith('https://web.telegram.org/z/'));
 }
 
-/**
- * Extract a group identifier from any web.telegram.org URL.
- * Telegram places the group/user ID either in the hash (#-123 or #@user)
- * or, for some variants, as the last pathname segment.
- * @param {string} url
- * @returns {string|null}
- */
-function extractTelegramGroupId(url) {
-  try {
-    const u = new URL(url);
-    if (u.hash) {
-      const hash = u.hash.slice(1).trim();
-      if (hash) return hash;
-    }
-    const match = u.pathname.match(/^\/[kaz]\/(.+)$/);
-    if (match) return decodeURIComponent(match[1]);
-    return null;
-  } catch (err) {
-    return null;
-  }
-}
-
 function setVisible(el, visible) {
   el.classList.toggle('hidden', !visible);
 }
@@ -172,18 +150,11 @@ function render() {
     return;
   }
 
-  // Case B — Telegram, but not Web K.
-  if (!isWebK(activeTabUrl)) {
+  // Case B — Telegram Web A or Z.
+  if (isWebAorZ(activeTabUrl)) {
     setVisible(els.noticeSection, true);
-    const groupId = extractTelegramGroupId(activeTabUrl);
-    if (isWebAorZ(activeTabUrl)) {
-      const variant = activeTabUrl.includes('/a/') ? 'Web A' : 'Web Z';
-      els.noticeText.textContent = `⚠ You are on Telegram ${variant}. Switch to Web K to record${groupId ? ' this group' : ''}.`;
-    } else if (groupId) {
-      els.noticeText.textContent = '⚠ Open this group in Telegram Web K to start recording.';
-    } else {
-      els.noticeText.textContent = '⚠ This extension requires Telegram Web K.';
-    }
+    const variant = activeTabUrl.includes('/a/') ? 'Web A' : 'Web Z';
+    els.noticeText.textContent = `⚠ You are on Telegram ${variant}. This extension requires Web K.`;
     setVisible(els.switchWebK, true);
     return;
   }
@@ -244,11 +215,7 @@ function render() {
 // ---------------------------------------------------------------------------
 
 els.switchWebK.addEventListener('click', () => {
-  const groupId = extractTelegramGroupId(activeTabUrl);
-  const url = groupId
-    ? `https://web.telegram.org/k/#${encodeURIComponent(groupId)}`
-    : 'https://web.telegram.org/k/';
-  chrome.tabs.update(activeTabId, { url });
+  chrome.tabs.update(activeTabId, { url: 'https://web.telegram.org/k/' });
   window.close();
 });
 
