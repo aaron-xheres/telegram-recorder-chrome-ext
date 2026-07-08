@@ -287,11 +287,12 @@ async function extractMedia(bubble) {
       // If an image sits inside a .media-gif-wrapper it is a static poster/thumbnail
       // for a GIF that Telegram renders as a video. Skip it so the wait-for-media
       // path can capture the actual video blob, even if it has not been injected yet.
-      // Also skip any image whose wrapper already contains a blob video.
+      // Also skip any image whose wrapper already contains a <video> (blob or stream),
+      // because that image is just a poster frame for the real video.
       const mediaWrapper = img.closest('.media-container, .media-gif-wrapper, .attachment');
       if (mediaWrapper && (
         mediaWrapper.classList.contains('media-gif-wrapper') ||
-        mediaWrapper.querySelector('video[src^="blob:"]')
+        mediaWrapper.querySelector('video')
       )) return;
       seen.add(src);
       media.push(src);
@@ -356,9 +357,9 @@ async function extractMedia(bubble) {
       media.push(url);
     });
 
-    // Only keep blob: URLs as media references. External/reference links
-    // (e.g. t.me, co.uk) belong in the links array, not media.
-    return media.filter(url => url.startsWith('blob:'));
+    // Keep blob: and Telegram stream: URLs as media references. External/reference
+    // links (e.g. t.me, co.uk) belong in the links array, not media.
+    return media.filter(url => url.startsWith('blob:') || url.startsWith('stream:'));
   } catch (err) {
     console.error('[TelegramRecorder] extractMedia failed', err);
     return [];

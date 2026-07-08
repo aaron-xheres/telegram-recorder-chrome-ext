@@ -264,20 +264,37 @@
   }
 
   /**
-   * Download a single media blob to the background service worker.
-   * Only blob: URLs are downloaded locally; remote URLs (e.g. t.me links)
-   * would be blocked by CORS and are left as references in the media array.
+   * Compute a short, stable identifier for a string. Used for stream: URLs whose
+   * full path is too long to be a filename.
+   * @param {string} str
+   * @returns {string}
+   */
+  function hashString(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (h << 5) - h + str.charCodeAt(i);
+      h |= 0;
+    }
+    return Math.abs(h).toString(16);
+  }
+
+  /**
+   * Download a single media item to the background service worker.
+   * Supports blob: URLs (same-origin page blobs) and Telegram stream: URLs.
+   * Remote URLs (e.g. t.me links) are blocked by CORS and left as references.
    * @param {string} url
    * @param {string} groupId
    * @returns {Promise<string|null>} Relative path inside the group folder, e.g. "media/<guid>.ext".
    */
   async function downloadMediaItem(url, groupId) {
-    if (!url.startsWith('blob:')) {
-      console.log('[TelegramRecorder] skipping non-blob media URL', url);
+    if (!url.startsWith('blob:') && !url.startsWith('stream:')) {
+      console.log('[TelegramRecorder] skipping non-downloadable media URL', url);
       return null;
     }
 
-    const guid = url.split('/').pop() || 'unknown';
+    const guid = url.startsWith('stream:')
+      ? hashString(url)
+      : (url.split('/').pop() || 'unknown');
     if (downloadedMediaGuids.has(guid)) {
       const filename = downloadedMediaGuids.get(guid);
       console.log('[TelegramRecorder] media already downloaded, skipping', guid);

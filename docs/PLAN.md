@@ -504,6 +504,10 @@ presence of actual media wrappers/elements (`.media-gif-wrapper`, `.media-contai
 wait-and-re-extract pass so that lazy-loaded or late-injected elements (e.g. the `<video>` inside a
 GIF wrapper) are captured. Custom-emoji stickers are deliberately excluded from this detection.
 
+Video URLs may be either `blob:` (ephemeral same-origin blobs) or Telegram `stream:` URLs (internal
+streaming endpoints). Both are captured as references; downloads are attempted for both schemes, but
+`stream:` URLs may fail if Telegram's streaming endpoint rejects the request.
+
 ### 6.4 Complete Extraction Object
 
 ```js
