@@ -588,7 +588,7 @@ function renderTable() {
     tr.appendChild(createPosterNameCell(record.posterName));
     tr.appendChild(createIdCell(record.posterId));
     tr.appendChild(createContentCell(record.content));
-    tr.appendChild(createImagesCell(record.images));
+    tr.appendChild(createMediaCell(record.media ?? record.images));
     tr.appendChild(createLinksCell(record.links));
     tr.appendChild(createScreenshotCell(record.messageId));
 
@@ -641,18 +641,18 @@ function createContentCell(content) {
   return td;
 }
 
-function createImagesCell(images) {
+function createMediaCell(media) {
   const td = document.createElement('td');
-  td.className = 'images-cell';
-  if (!images || images.length === 0) {
+  td.className = 'media-cell';
+  if (!media || media.length === 0) {
     td.textContent = MISSING_FIELD;
     return td;
   }
   const count = document.createElement('div');
-  count.className = 'image-count';
-  count.textContent = `${images.length} image${images.length === 1 ? '' : 's'}`;
+  count.className = 'media-count';
+  count.textContent = `${media.length} media item${media.length === 1 ? '' : 's'}`;
   td.appendChild(count);
-  for (const url of images) {
+  for (const url of media) {
     const a = document.createElement('a');
     a.href = url;
     a.textContent = url;
@@ -766,14 +766,14 @@ const CSV_HEADERS = [
   'poster_id',
   'content',
   'links',
-  'images',
+  'media',
   'screenshot_file',
   'screenshot_path'
 ];
 
 const CSV_COMMENTS = [
   '# Screenshots are local files. Resolve paths relative to your telegram-recorder/ folder.',
-  '# Blob URLs in \'images\' column are ephemeral and expire when the recording tab is closed.'
+  '# Blob URLs in \'media\' column are ephemeral and expire when the recording tab is closed.'
 ];
 
 /**
@@ -811,7 +811,7 @@ function buildCsvRows(visibleMessages) {
       record.posterId ?? '',
       record.content ?? '',
       (record.links ?? []).join('|'),
-      (record.images ?? []).join('|'),
+      ((record.media ?? record.images) ?? []).join('|'),
       screenshotFile,
       screenshotPath
     ];
