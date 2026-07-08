@@ -133,10 +133,8 @@
       if (el) {
         // Ensure we don't accidentally grab a small inner element.
         if (selector === '[class*="bubbles"]' && !el.querySelector('.bubble') && !el.classList.contains('bubbles')) {
-          console.log('[TelegramRecorder] skipping generic bubbles match', selector, el.className);
           continue;
         }
-        console.log('[TelegramRecorder] found bubbles container via', selector, el.className);
         return el;
       }
     }
@@ -288,7 +286,6 @@
    */
   async function downloadMediaItem(url, groupId) {
     if (!url.startsWith('blob:') && !url.startsWith('stream:')) {
-      console.log('[TelegramRecorder] skipping non-downloadable media URL', url);
       return null;
     }
 
@@ -297,7 +294,6 @@
       : (url.split('/').pop() || 'unknown');
     if (downloadedMediaGuids.has(guid)) {
       const filename = downloadedMediaGuids.get(guid);
-      console.log('[TelegramRecorder] media already downloaded, skipping', guid);
       return `media/${filename}`;
     }
 
@@ -329,7 +325,6 @@
       }
 
       registerDownloadedMediaGuid(guid, filename);
-      console.log('[TelegramRecorder] downloaded media', { url, filename });
       return `media/${filename}`;
     } catch (err) {
       console.warn('[TelegramRecorder] downloadMediaItem failed', url, err);
@@ -509,7 +504,6 @@
         if (reMedia.length > 0) {
           messageData.media = reMedia;
           messageData.mediaFiles = await downloadMessageMedia(reMedia, messageData.groupId);
-          console.log('[TelegramRecorder] re-extracted media at screenshot time for', messageData.messageId, reMedia.length);
         }
       }
 
@@ -576,9 +570,6 @@
           detected += processAddedNode(node);
         }
       }
-      if (detected > 0) {
-        console.log('[TelegramRecorder] mutation detected', detected, 'bubble(s)');
-      }
     } catch (err) {
       console.error('[TelegramRecorder] mutation handler error', err);
     }
@@ -599,9 +590,6 @@
         detected++;
       }
     });
-    if (detected > 0) {
-      console.log('[TelegramRecorder] scan caught', detected, 'missed bubble(s)');
-    }
   }
 
   /**
@@ -644,18 +632,9 @@
    */
   async function processBubbleNode(bubble) {
     const mid = bubble.dataset.mid;
-    if (!mid) {
-      console.log('[TelegramRecorder] skipped bubble without data-mid (system/service message)');
-      return;
-    }
-    if (baselineSet.has(mid)) {
-      console.log('[TelegramRecorder] skipped baseline message', mid);
-      return;
-    }
-    if (recordedSet.has(mid)) {
-      console.log('[TelegramRecorder] skipped already-recorded message', mid);
-      return;
-    }
+    if (!mid) return;
+    if (baselineSet.has(mid)) return;
+    if (recordedSet.has(mid)) return;
 
     recordedSet.add(mid);
     let messageData = await extract(bubble, currentSessionId);
@@ -672,19 +651,12 @@
       await waitForMediaReady(bubble, 3000);
       const reMedia = await extractMedia(bubble);
       if (reMedia.length > 0) {
-        console.log('[TelegramRecorder] re-extracted media for', mid, reMedia);
         messageData = { ...messageData, media: reMedia };
-      } else {
-        console.warn('[TelegramRecorder] media detected but re-extract found none for', mid);
       }
     }
 
     messageData.mediaFiles = await downloadMessageMedia(messageData.media, currentGroupId);
 
-    console.log('[TelegramRecorder] queued new message', mid, messageData.posterName, {
-      media: messageData.media,
-      mediaFiles: messageData.mediaFiles
-    });
     enqueue(bubble, messageData);
   }
 

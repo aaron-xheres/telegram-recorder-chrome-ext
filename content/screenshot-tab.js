@@ -126,13 +126,6 @@ async function captureScreenshotTab(bubble) {
 
     const dpr = window.devicePixelRatio || 1;
 
-    console.log('[TelegramRecorder] requesting tab capture', {
-      bubbleRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-      visibleRect: { x: visibleRect.x, y: visibleRect.y, width: visibleRect.width, height: visibleRect.height },
-      dpr,
-      viewport: { width: window.innerWidth, height: window.innerHeight }
-    });
-
     // The service worker focuses the tab and retries the capture internally.
     // focus: true tells the service worker to restore/focus the window first,
     // which is required for chrome.tabs.captureVisibleTab.
@@ -144,13 +137,6 @@ async function captureScreenshotTab(bubble) {
       await sleep(200);
       response = await chrome.runtime.sendMessage({ type: TAB_MSG.CAPTURE_TAB, focus: true });
     }
-
-    console.log('[TelegramRecorder] CAPTURE_TAB response', {
-      ok: response?.ok,
-      hasFullDataUrl: Boolean(response?.fullDataUrl),
-      fullDataUrlLength: response?.fullDataUrl?.length,
-      error: response?.error
-    });
 
     if (!response || !response.ok || !response.fullDataUrl) {
       console.error('[TelegramRecorder] CAPTURE_TAB failed', response);

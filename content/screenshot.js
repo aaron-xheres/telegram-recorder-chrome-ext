@@ -30,9 +30,6 @@ async function captureScreenshot(bubble) {
   if (useCanvas) {
     const canvasResult = await captureScreenshotCanvas(bubble);
     if (canvasResult) return canvasResult;
-    console.log('[TelegramRecorder] falling back to tab-capture screenshot');
-  } else {
-    console.log('[TelegramRecorder] canvas capture disabled; using tab capture');
   }
 
   return captureScreenshotTab(bubble);
