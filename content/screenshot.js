@@ -206,11 +206,11 @@ async function captureScreenshotTab(bubble) {
     // We only retry here if the message channel itself is temporarily unavailable.
     let response;
     try {
-      response = await chrome.runtime.sendMessage({ type: SCREENSHOT_MSG.CAPTURE_TAB });
+      response = await chrome.runtime.sendMessage({ type: SCREENSHOT_MSG.CAPTURE_TAB, focus: true });
     } catch (err) {
       console.warn('[TelegramRecorder] CAPTURE_TAB message failed, retrying once', err);
       await sleep(200);
-      response = await chrome.runtime.sendMessage({ type: SCREENSHOT_MSG.CAPTURE_TAB });
+      response = await chrome.runtime.sendMessage({ type: SCREENSHOT_MSG.CAPTURE_TAB, focus: true });
     }
 
     console.log('[TelegramRecorder] CAPTURE_TAB response', {

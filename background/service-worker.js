@@ -377,28 +377,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleAsync(
         (async () => {
           try {
-            // Ensure the Telegram window/tab is visible before capturing.
-            // If the window is minimized, restore it first; then focus it and
-            // activate the tab. This is intrusive but better than losing the
-            // screenshot entirely.
             const windowId = sender.tab?.windowId;
-            console.log('[TelegramRecorder] CAPTURE_TAB start', { tabId, windowId });
-            if (windowId) {
-              try {
-                const win = await chrome.windows.get(windowId);
-                console.log('[TelegramRecorder] window state', { windowId, state: win.state });
-                if (win.state === 'minimized') {
-                  console.log('[TelegramRecorder] restoring minimized window', windowId);
-                  await chrome.windows.update(windowId, { state: 'normal' });
+            console.log('[TelegramRecorder] CAPTURE_TAB start', { tabId, windowId, focus: message.focus });
+
+            // Only focus/restore the window when the caller explicitly requests
+            // it (i.e. the tab-capture fallback path). The canvas path does not
+            // need an active tab.
+            if (message.focus === true) {
+              if (windowId) {
+                try {
+                  const win = await chrome.windows.get(windowId);
+                  console.log('[TelegramRecorder] window state', { windowId, state: win.state });
+                  if (win.state === 'minimized') {
+                    console.log('[TelegramRecorder] restoring minimized window', windowId);
+                    await chrome.windows.update(windowId, { state: 'normal' });
+                  }
+                } catch (winErr) {
+                  console.warn('[TelegramRecorder] could not inspect window state', windowId, winErr);
                 }
-              } catch (winErr) {
-                console.warn('[TelegramRecorder] could not inspect window state', windowId, winErr);
+                await chrome.windows.update(windowId, { focused: true });
               }
-              await chrome.windows.update(windowId, { focused: true });
+              await chrome.tabs.update(tabId, { active: true });
+              console.log('[TelegramRecorder] tab activated', tabId);
+              await sleep(150);
             }
-            await chrome.tabs.update(tabId, { active: true });
-            console.log('[TelegramRecorder] tab activated', tabId);
-            await sleep(150);
 
             const fullDataUrl = await captureVisibleTabWithRetry(windowId);
             console.log('[TelegramRecorder] capture success', { tabId, dataUrlLength: fullDataUrl?.length });
