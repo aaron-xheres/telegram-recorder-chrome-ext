@@ -35,7 +35,9 @@ new messages via DOM observation, captures screenshots, and persists structured 
 filesystem. A viewer page enables multi-group browsing, session filtering, and CSV export.
 
 **Target platform:** Telegram Web K exclusively. The extension detects if the user is on Web A
-(`/a/`) or Web Z (`/z/`) and offers an auto-redirect to `/k/`.
+(`/a/`) or Web Z (`/z/`) and offers a manual switch to `/k/`. Telegram blocks direct,
+group-preserving URL changes from the extension popup, so the switch opens the Web K root
+and the user must navigate back to the desired group manually.
 
 **No server required.** All data stays local. Files written to `Downloads/telegram-recorder/`.
 
@@ -53,13 +55,19 @@ telegram-recorder-chrome-ext/
 ├── content/
 │   ├── content.js                # MutationObserver setup + orchestration
 │   ├── extractor.js              # DOM → structured message data
-│   └── screenshot.js             # captureVisibleTab + canvas crop
+│   ├── screenshot.js             # Screenshot strategy orchestrator
+│   ├── screenshot-canvas.js      # html2canvas-based capture
+│   └── screenshot-tab.js         # chrome.tabs.captureVisibleTab crop
+├── lib/
+│   └── html2canvas.min.js        # Canvas rendering library
 ├── popup/
 │   ├── popup.html                # Start/Stop UI, page validation, group info
 │   ├── popup.js
 │   └── popup.css
+├── shared/
+│   └── messages.js               # Message type constants
 ├── viewer/
-│   ├── viewer.html               # Multi-group record viewer
+│   ├── viewer.html               # Single-group record viewer
 │   ├── viewer.js
 │   └── viewer.css
 └── icons/
@@ -73,11 +81,13 @@ telegram-recorder-chrome-ext/
 | Component | Context | Responsibilities |
 |---|---|---|
 | `service-worker.js` | Background (persistent via keepalive) | Recording state, `chrome.downloads`, routing messages between content ↔ popup |
-| `content.js` | Injected into `web.telegram.org/k/*` | MutationObserver lifecycle, message processing queue, screenshot trigger |
+| `content.js` | Injected into `web.telegram.org/k/*` | MutationObserver lifecycle, message processing queue, screenshot trigger, media download |
 | `extractor.js` | Same context as `content.js` | DOM parsing → structured data object |
-| `screenshot.js` | Same context as `content.js` | scroll → wait → request capture → crop |
+| `screenshot.js` | Same context as `content.js` | Chooses canvas or tab capture strategy |
+| `screenshot-canvas.js` | Same context as `content.js` | html2canvas-based full-bubble render |
+| `screenshot-tab.js` | Same context as `content.js` | `chrome.tabs.captureVisibleTab` + viewport crop |
 | `popup.html/js` | Extension popup | Page validation, group info display, start/stop, session status |
-| `viewer.html/js` | `chrome-extension://...` page | File System Access API, table render, session filter, CSV export |
+| `viewer.html/js` | `chrome-extension://...` page | File System Access API, table render, session filter, CSV export, media/screenshot lightboxes |
 
 ### MV3 Communication Channels
 
@@ -318,7 +328,13 @@ runs of whitespace to single spaces.
 ### System / Service Messages
 
 System messages (join events, pinned message notifications, etc.) appear as DOM additions to
-the messages container but reliably lack `data-mid`. Absence of `data-mid` → skip.
+the messages container. Some have no `data-mid`, while others (e.g. "X joined the group") do
+carry a `data-mid` and use the `service` bubble class. Both conditions are skipped:
+
+```js
+if (!mid) return;                         // no message ID
+if (bubble.classList.contains('service')) return;  // system/service message
+```
 
 ---
 
@@ -406,13 +422,14 @@ function handleMutations(mutations) {
 }
 ```
 
-### Guards in `enqueue(bubble)`
+### Guards in `processBubbleNode(bubble)`
 
 ```
-1. No data-mid → skip (system message)
-2. mid in baselineSet → skip (existed before recording started)
-3. mid in recordedSet → skip (already processed — collision guard)
-4. Else → add to processing queue
+1. No data-mid → skip
+2. bubble.classList.contains('service') → skip (system/service message)
+3. mid in baselineSet → skip (existed before recording started)
+4. mid in recordedSet → skip (already processed — collision guard)
+5. Else → extract, download, and add to processing queue
 ```
 
 ### Safety Scan Fallback
@@ -474,35 +491,58 @@ translatable.querySelectorAll('a.anchor-url, a.mention, a.anchor-hashtag').forEa
 })
 ```
 
-### 6.3 Media URLs — Ephemeral Blob URLs
+### 6.3 Media URLs — Ephemeral Blob / Stream URLs
 
 ```
 media = []
 // Photos / videos / files / GIFs inside the bubble.
 // Includes <img src>, <video src>, background-image URLs, and attachment <a href>.
+// Avatars, emoji, tiny images, and GIF poster frames are excluded.
 bubble.querySelectorAll('img, video, .media-photo, .message-photo, .attachment, .thumbnail, .photo, a[download]')
   .forEach(el => {
     const url = el.currentSrc || el.src || el.href || backgroundImageUrl(el)
     if (!url) return
     if (isAvatarOrEmoji(el)) return
-    if (!media.includes(url)) media.push(url)  // blob: or file URL
+    if (isPosterFrame(el)) return   // skip GIF/video poster thumbnails
+    if (!media.includes(url)) media.push(url)  // blob:, stream:, or file URL
   })
+
+// Keep only same-origin blob: URLs and Telegram stream: URLs as media references.
+return media.filter(url => url.startsWith('blob:') || url.startsWith('stream:'))
 ```
 
-Blob URLs are ephemeral (expire with the tab session). They are stored in the JSON record for
-reference but will be dead after the tab is closed. The screenshot captures media visually.
-Stickers and custom emoji are excluded from `media[]` because they are part of the message text,
-not standalone media attachments.
+Blob and `stream:` URLs are ephemeral (expire with the tab session). They are stored in the JSON
+record for reference but will be dead after the tab is closed or refreshed. The screenshot captures
+media visually. Stickers and custom emoji are excluded from `media[]` because they are part of the
+message text, not standalone media attachments.
 
 Telegram renders animated GIFs as silent videos inside a `.media-gif-wrapper`. That wrapper also
 contains a static JPEG poster image (`<img class="media-photo">`). The poster must be skipped so
 that the actual video blob is captured; otherwise the JPEG thumbnail is saved instead of the GIF.
+Any image whose wrapper already contains a `<video>` is also treated as a poster frame and skipped.
 
 Media detection checks both bubble-level classes (`photo`, `video`, `document`, etc.) and the
 presence of actual media wrappers/elements (`.media-gif-wrapper`, `.media-container`, `.attachment`,
-`.media-photo`, `.media-video`, `<audio>`). When media is detected, the bubble is given a short
-wait-and-re-extract pass so that lazy-loaded or late-injected elements (e.g. the `<video>` inside a
-GIF wrapper) are captured. Custom-emoji stickers are deliberately excluded from this detection.
+`.media-photo`, `.media-video`, `<audio>`). Custom-emoji stickers are deliberately excluded from
+this detection.
+
+#### Lazy-Loaded Photos
+
+Telegram only inserts the actual `<img class="media-photo">` blob source when the bubble scrolls
+into the viewport. If media is extracted immediately on bubble insertion, the image element is not
+yet present and extraction returns nothing. Therefore the final media extraction and download
+happen when the bubble reaches the front of the screenshot queue:
+
+```
+processNext():
+  if (bubbleHasMedia(bubble)):
+    bubble.scrollIntoView({ block: 'center', behavior: 'instant' })
+    wait for contained <img>/<video> elements to load
+    re-extract media
+    download any newly found blob:/stream: URLs
+  captureScreenshot(bubble)
+  save files
+```
 
 Video URLs may be either `blob:` (ephemeral same-origin blobs) or Telegram `stream:` URLs (internal
 streaming endpoints). Both are captured as references; downloads are attempted for both schemes, but
@@ -518,13 +558,17 @@ streaming endpoints). Both are captured as references; downloads are attempted f
   posterName:  resolvePosterName(bubble),                  // string | null
   posterId:    resolvePosterPeerId(bubble),                 // string | null
   content:     extractText(bubble),                        // emoji-stripped, link text preserved
-  media:       extractMedia(bubble),                       // string[] — blob/file URLs
+  media:       extractMedia(bubble),                       // string[] — blob:/stream: URLs
   mediaFiles:  downloadMessageMedia(extractMedia(bubble)), // string[] — local "media/<guid>.ext" paths
   links:       extractLinks(bubble),                       // string[] — unique hrefs
   sessionId:   currentSessionId,                           // set by recording state
   screenshotFile: `${bubble.dataset.mid}.png`,
 }
 ```
+
+`mediaFiles` is populated in two places: (1) an initial download attempt right after extraction,
+and (2) a second attempt when the bubble is scrolled into view for its screenshot, which catches
+lazy-loaded photos that were not present at extraction time.
 
 ---
 
@@ -533,28 +577,34 @@ streaming endpoints). Both are captured as references; downloads are attempted f
 ### Process (per message)
 
 ```
-1. initialRect = element.getBoundingClientRect()
-2. If initialRect.height > viewport height → element.scrollIntoView({ block: 'start' })
-   else → element.scrollIntoView({ block: 'center' })
-3. await 150ms  — allow repaint to settle
-4. await requestAnimationFrame  — ensure scroll position is reflected
-5. rect = element.getBoundingClientRect()
-6. visibleRect = intersection of rect with the current viewport
-7. dpr = window.devicePixelRatio  — account for retina displays
+1. Choose capture strategy (popup setting; default = canvas-first):
+   a. Canvas-first: try html2canvas full-bubble render
+      → if successful, return PNG data URL
+   b. Fallback / disabled: use tab capture
 
-8. content.js → background: { type: 'CAPTURE_TAB' }
-9. background restores the sender window if minimized, focuses it, activates the
-   sender tab, then calls chrome.tabs.captureVisibleTab({ format: 'png' }) with 3 retries.
-   Empty data URLs are treated as failures and retried.
-   → fullDataUrl (entire visible tab as PNG base64)
-10. background → content.js: { fullDataUrl }
+2. Tab capture path:
+   a. initialRect = element.getBoundingClientRect()
+   b. If initialRect.height > viewport height → element.scrollIntoView({ block: 'start' })
+      else → element.scrollIntoView({ block: 'center' })
+   c. await 150ms  — allow repaint to settle
+   d. await requestAnimationFrame  — ensure scroll position is reflected
+   e. rect = element.getBoundingClientRect()
+   f. visibleRect = intersection of rect with the current viewport
+   g. dpr = window.devicePixelRatio  — account for retina displays
 
-12. content.js: create <canvas> width=(visibleRect.width × dpr), height=(visibleRect.height × dpr)
-13. img.onload: ctx.drawImage(fullImg, -(visibleRect.left × dpr), -(visibleRect.top × dpr))
-14. croppedDataUrl = canvas.toDataURL('image/png')
+   h. content.js → background: { type: 'CAPTURE_TAB' }
+   i. background restores the sender window if minimized, focuses it, activates the
+      sender tab, then calls chrome.tabs.captureVisibleTab({ format: 'png' }) with 3 retries.
+      Empty data URLs are treated as failures and retried.
+      → fullDataUrl (entire visible tab as PNG base64)
+   j. background → content.js: { fullDataUrl }
 
-15. content.js → background: { type: 'SAVE_FILES', messageData, croppedDataUrl }
-16. background: chrome.downloads.download() × 2
+   k. content.js: create <canvas> width=(visibleRect.width × dpr), height=(visibleRect.height × dpr)
+   l. img.onload: ctx.drawImage(fullImg, -(visibleRect.left × dpr), -(visibleRect.top × dpr))
+   m. croppedDataUrl = canvas.toDataURL('image/png')
+
+3. content.js → background: { type: 'SAVE_FILES', messageData, croppedDataUrl }
+4. background: chrome.downloads.download() × 2
       filename: `telegram-recorder/{groupId}/{messageId}.png`
       filename: `telegram-recorder/{groupId}/{messageId}.json`
 ```
@@ -614,13 +664,20 @@ async function processNext():
 On enqueue:
   messageData = extractor.extract(bubble)   ← immediate, before queue wait
   recordedSet.add(mid)                      ← immediate, prevents double-processing
+  initial media download attempt            ← may be empty for lazy-loaded photos
 
 On dequeue (when screenshot slot is free):
+  if bubble contains media:
+    scroll bubble into view
+    wait for lazy media to load
+    re-extract and download media           ← catches lazy-loaded photos/videos
   screenshot pipeline for this bubble
   save messageData + screenshot
 ```
 
-This ensures data accuracy even if the screenshot is delayed.
+Text, links, and sender metadata are captured immediately at enqueue time. Media is finalized
+when the bubble is scrolled into view for its screenshot, because Telegram lazy-loads photo blobs
+and only injects the real `<img>` source at that point.
 
 ---
 
@@ -705,6 +762,9 @@ Downloads/
     ├── -2350891274/                            ← group A (peer ID as folder name)
     │   ├── manifest-1704067200000.json         ← session 1
     │   ├── manifest-1704070800000.json         ← session 2
+    │   ├── media/                              ← downloaded media attachments
+    │   │   ├── 94e1baae-13ef-427f-ba9e-c1b3b535ec01.png
+    │   │   └── a1b2c3d4.mp4
     │   ├── 4294984774.json
     │   ├── 4294984774.png
     │   ├── 4294984775.json
@@ -713,6 +773,7 @@ Downloads/
     │   └── 4294984776.png
     └── -1001234567890/                         ← group B
         ├── manifest-1704153600000.json
+        ├── media/
         ├── 5000012345.json
         └── 5000012345.png
 ```
@@ -748,23 +809,22 @@ User clicks "Start" in popup
 
 ```
 MutationObserver fires
-  → handleMutations() → enqueue(bubble)
-    → guard checks (data-mid, baselineSet, recordedSet)
+  → handleMutations() → processBubbleNode(bubble)
+    → guard checks (data-mid, service class, baselineSet, recordedSet)
     → messageData = extractor.extract(bubble)   ← immediate
     → recordedSet.add(mid)                       ← immediate
+    → initial media download attempt
     → queue.push({ bubble, messageData })
     → processNext() if not already processing
 
 processNext():
   { bubble, messageData } = queue.shift()
-  → screenshot.js:
+  → if bubbleHasMedia(bubble):
       bubble.scrollIntoView({ block: 'center', behavior: 'instant' })
-      await 150ms
-      rect = bubble.getBoundingClientRect()
-      dpr = window.devicePixelRatio
-      → background: CAPTURE_TAB
-      ← fullDataUrl
-      → canvas crop → croppedDataUrl
+      wait for contained <img>/<video> to load
+      re-extract media and download any new blob:/stream: URLs
+  → screenshot.js (canvas-first or tab capture):
+      capture bubble → croppedDataUrl
   → background: SAVE_FILES { messageData, croppedDataUrl }
       chrome.downloads.download({ filename: `telegram-recorder/${groupId}/${mid}.png`, url: croppedDataUrl })
       chrome.downloads.download({ filename: `telegram-recorder/${groupId}/${mid}.json`, url: jsonDataUrl(messageData) })
@@ -810,7 +870,7 @@ User opens viewer.html → clicks "Open Folder"
   → window.showDirectoryPicker({ mode: 'read' })
   → User selects a single group folder (e.g. telegram-recorder/-2350891274)
   → Iterate entries within the selected folder:
-      if directory named "media" → load media files
+      if directory named "media" → load media file handles, keyed by filename
       if file starts with "manifest-" and ends with ".json" → parse → sessions map
       if file ends with ".json" → parse → messages array
       if file ends with ".png" → index by stem (messageId) for screenshot lookup
@@ -847,7 +907,9 @@ Case B — Telegram Web A or Z (/a/ or /z/):
   │    This extension requires Web K.       │
   │                                         │
   │  [ Switch to Telegram Web K ]           │
-  │    (redirects tab to /k/)               │
+  │    (opens /k/; Telegram prevents the    │
+  │     extension from preserving the       │
+  │     current group in the URL)           │
   │                                         │
   │  [ Open Record Viewer ↗ ]               │
   └─────────────────────────────────────────┘
@@ -931,6 +993,9 @@ Stop clicked:
 │  Telegram Recorder — Viewer                                              │
 │  [ Open Folder ]  [ Export CSV ]                                        │
 ├──────────────────────────────────────────────────────────────────────────┤
+│  Group Info card                                                         │
+│  Quick FAQ card                                                          │
+├──────────────────────────────────────────────────────────────────────────┤
 │  Filters                                                                 │
 │  Poster IDs    [ Add a poster ID… ]   [Add]   [chip] [chip] [x]        │
 │  Poster names  [ Add a poster name… ] [Add]   [chip] [chip] [x]        │
@@ -955,7 +1020,7 @@ Stop clicked:
 | Poster Name | Yes + multi-term filter | `—` when `null`; supports `admin` keyword for anonymous posts |
 | Poster ID | Yes | `—` when `null`; otherwise a clickable link to `https://web.telegram.org/k/#<posterId>` |
 | Message Content | No | Full text shown in-cell; not collapsible |
-| Media | No | Count label + each media URL rendered as clickable anchor; stacked vertically |
+| Media | No | Count label + each downloaded media file rendered as clickable anchor; stacked vertically. Click opens a media lightbox (image or video) loaded from the local file handle |
 | Links | No | Each `href` rendered as clickable anchor; stacked vertically |
 | Screenshot | No | Thumbnail max 80px height; click → lightbox overlay |
 
@@ -1025,12 +1090,19 @@ checked, this section imposes no restriction.
 - Unchecking a session hides its rows in real-time (no reload).
 - Select/Deselect All operates on all session checkboxes.
 
-### 13.5 Screenshot Lightbox
+### 13.5 Lightboxes
 
-- Click thumbnail → full-size image shown in overlay
+**Screenshot lightbox**
+- Click screenshot thumbnail → full-size image shown in overlay
 - Overlay: semi-transparent dark background, centered image, click outside to close
 - Image loaded via `URL.createObjectURL(await fileHandle.getFile())`
-- All blob URLs revoked on `window.beforeunload`
+
+**Media lightbox**
+- Click a media link in the Media column → overlay showing the downloaded image or video
+- Video element has native controls
+- Image/video loaded via `URL.createObjectURL(await fileHandle.getFile())`
+
+All object URLs are revoked on `window.beforeunload`.
 
 ### 13.6 CSV Export
 
@@ -1137,21 +1209,45 @@ No file writes occur on collision. No error thrown. Silent skip.
     "tabs",
     "activeTab",
     "downloads",
-    "storage"
+    "storage",
+    "scripting"
   ],
   "host_permissions": [
     "https://web.telegram.org/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://web.telegram.org/k/*"],
+      "js": [
+        "shared/messages.js",
+        "lib/html2canvas.min.js",
+        "content/screenshot-canvas.js",
+        "content/screenshot-tab.js",
+        "content/screenshot.js",
+        "content/extractor.js",
+        "content/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["viewer/*"],
+      "matches": ["<all_urls>"]
+    }
   ]
 }
 ```
 
-| Permission | Required For |
-|---|---|
+| Permission / Entry | Required For |
+|---|---|---|
 | `tabs` | `chrome.tabs.captureVisibleTab()`, `chrome.tabs.sendMessage()` |
 | `activeTab` | Accessing active tab URL in popup |
 | `downloads` | `chrome.downloads.download()` for all file saves |
 | `storage` | `chrome.storage.local` + `chrome.storage.session` |
+| `scripting` | `chrome.scripting.executeScript()` for content-script reinjection |
 | `host_permissions: web.telegram.org` | Content script injection |
+| `web_accessible_resources: viewer/*` | Allowing the viewer page to load its own assets from any origin |
 
 ---
 
@@ -1169,6 +1265,10 @@ No file writes occur on collision. No error thrown. Silent skip.
 | MV3 service worker may terminate | In-flight state lost | `chrome.storage.session` for `recordedSet`; rehydrate on wake |
 | Chat navigation while recording | Observer on wrong DOM | Auto-stop on URL change; user must restart on new chat |
 | Edited messages reuse `data-mid` | Re-record would overwrite | Treated as collision — original preserved, edit not re-recorded |
+| Service messages have `data-mid` | Would be recorded as normal messages | Skipped by `bubble.classList.contains('service')` |
+| Photos lazy-load on scroll | Media missing if extracted before bubble is visible | Final media extraction happens when the bubble is scrolled into view for its screenshot |
+| Non-local `blob:` / `stream:` URLs | Dead after Telegram tab closes/refreshes | Downloaded files are persisted in `media/`; viewer FAQ warns about ephemeral links |
+| Telegram blocks direct URL changes | Group-aware popup redirect from /a/ or /z/ to /k/#group fails | Popup offers a manual switch to `/k/` root; user reopens the group manually |
 
 ---
 
@@ -1181,6 +1281,7 @@ No file writes occur on collision. No error thrown. Silent skip.
 | Sender name element structure | **Resolved** | `div.colored-name > span.peer-title[data-peer-id]`. Both carry sender peer ID. |
 | `data-peer-id` on `.bubble` | **Resolved** | Always the group/chat peer ID. Not the sender. |
 | Multiple bubbles per sender in one group | **Resolved** | Both bubbles confirmed to have `.peer-title` (non-anonymous). Observer handles Scenario A and B. |
+| System message `data-mid` absence | **Resolved** | Some service messages (e.g. join events) do carry `data-mid`. Reliable skip uses the `service` bubble class. |
 
 ### Remaining Research (Phase 1 — live DOM validation)
 
@@ -1189,9 +1290,8 @@ No file writes occur on collision. No error thrown. Silent skip.
 | 1 | Group name selector | Confirm exact selector for chat name (`.chat-info .peer-title` or `<title>`) |
 | 2 | `data-mid` uniqueness across sessions | Confirm IDs don't repeat across different recording sessions for same group |
 | 3 | `subtree: true` observer performance | Verify no performance degradation in high-volume chats |
-| 4 | System message `data-mid` absence | Confirm service messages reliably lack `data-mid` |
-| 5 | Scroll + capture timing | Validate 150ms wait is sufficient; test on slow connections and media-heavy messages |
-| 6 | Chat navigation event | Confirm `hashchange` or `popstate` fires when switching chats in Web K |
+| 4 | Scroll + capture timing | Validate 150ms wait is sufficient; test on slow connections and media-heavy messages |
+| 5 | Chat navigation event | Confirm `hashchange` or `popstate` fires when switching chats in Web K |
 
 ---
 
