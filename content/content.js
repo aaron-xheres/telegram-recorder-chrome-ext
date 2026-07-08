@@ -498,6 +498,21 @@
     const { bubble, messageData } = queue.shift();
 
     try {
+      // Re-extract media when the bubble reaches the front of the queue.
+      // Telegram lazy-loads photos; the actual <img class="media-photo">
+      // is only inserted/loaded once the bubble scrolls into view.
+      if (bubbleHasMedia(bubble)) {
+        bubble.scrollIntoView({ block: 'center', behavior: 'instant' });
+        // Wait for lazy media elements to appear and finish loading.
+        await waitForMediaReady(bubble, 3000);
+        const reMedia = await extractMedia(bubble);
+        if (reMedia.length > 0) {
+          messageData.media = reMedia;
+          messageData.mediaFiles = await downloadMessageMedia(reMedia, messageData.groupId);
+          console.log('[TelegramRecorder] re-extracted media at screenshot time for', messageData.messageId, reMedia.length);
+        }
+      }
+
       const croppedDataUrl = await captureScreenshot(bubble);
 
       if (!croppedDataUrl) {
