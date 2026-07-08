@@ -329,6 +329,7 @@
       }
 
       registerDownloadedMediaGuid(guid, filename);
+      console.log('[TelegramRecorder] downloaded media', { url, filename });
       return `media/${filename}`;
     } catch (err) {
       console.warn('[TelegramRecorder] downloadMediaItem failed', url, err);
@@ -366,25 +367,42 @@
   // ---------------------------------------------------------------------------
 
   /**
-   * Wait for all <img>/<video> elements inside a bubble to finish loading.
-   * Uses a MutationObserver to catch late-injected media and resolves after a
-   * short quiet period once everything is complete.
+   * Wait for media-relevant <img>/<video> elements inside a bubble to finish
+   * loading. Uses a MutationObserver to catch late-injected media and resolves
+   * after a short quiet period once everything is complete.
+   * Avatars, emoji, and custom-emoji stickers are ignored so that a slow or
+   * broken avatar/emoji image cannot block the actual media attachment.
    * @param {Element} bubble
    * @param {number} timeoutMs
    * @returns {Promise<void>}
    */
   function waitForMediaReady(bubble, timeoutMs = 3000) {
     return new Promise(resolve => {
-      const deadline = Date.now() + timeoutMs;
       let quietTimer = null;
       let settled = false;
 
+      // Same exclusion list as extractor.js; defined there but mirrored here
+      // so this helper does not wait on avatar/emoji decorations.
+      const excludeSelectors = [
+        '.avatar',
+        '.bubbles-group-avatar',
+        '.bubble-name-forwarded-avatar',
+        'custom-emoji-element',
+        'custom-emoji-renderer-element',
+        '.emoji',
+        '.emoji-image'
+      ].join(', ');
+
       function isMediaComplete() {
-        const imgs = bubble.querySelectorAll('img');
-        const videos = bubble.querySelectorAll('video');
+        const imgs = Array.from(bubble.querySelectorAll('img')).filter(img =>
+          !img.closest(excludeSelectors)
+        );
+        const videos = Array.from(bubble.querySelectorAll('video')).filter(video =>
+          !video.closest(excludeSelectors)
+        );
 
         // Wait for images to have a src and finish loading.
-        const imagesReady = Array.from(imgs).every(img => {
+        const imagesReady = imgs.every(img => {
           const src = img.currentSrc || img.src;
           if (!src) return false;
           return img.complete;
@@ -392,7 +410,7 @@
 
         // Only wait for blob: videos to become ready. Stream URLs (e.g.
         // stream/...) may never fire metadata and are handled separately.
-        const videosReady = Array.from(videos).every(video => {
+        const videosReady = videos.every(video => {
           const src = video.currentSrc || video.src;
           if (!src) return true;
           if (!src.startsWith('blob:')) return true;
@@ -407,6 +425,7 @@
           Array.from(mutation.addedNodes).some(node => {
             if (node.nodeType !== Node.ELEMENT_NODE) return false;
             const el = /** @type {Element} */ (node);
+            if (el.closest?.(excludeSelectors)) return false;
             return el.matches?.('img, video') || el.querySelector?.('img, video') != null;
           })
         );
@@ -625,15 +644,18 @@
       await waitForMediaReady(bubble, 3000);
       const reMedia = await extractMedia(bubble);
       if (reMedia.length > 0) {
+        console.log('[TelegramRecorder] re-extracted media for', mid, reMedia);
         messageData = { ...messageData, media: reMedia };
+      } else {
+        console.warn('[TelegramRecorder] media detected but re-extract found none for', mid);
       }
     }
 
     messageData.mediaFiles = await downloadMessageMedia(messageData.media, currentGroupId);
 
     console.log('[TelegramRecorder] queued new message', mid, messageData.posterName, {
-      media: messageData.media?.length,
-      mediaFiles: messageData.mediaFiles?.length
+      media: messageData.media,
+      mediaFiles: messageData.mediaFiles
     });
     enqueue(bubble, messageData);
   }
