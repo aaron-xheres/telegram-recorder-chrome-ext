@@ -633,6 +633,9 @@
   async function processBubbleNode(bubble) {
     const mid = bubble.dataset.mid;
     if (!mid) return;
+    // Ignore service messages (e.g. "X joined the group", pinned messages,
+    // group name changes) that have no real sender or content to record.
+    if (bubble.classList.contains('service')) return;
     if (baselineSet.has(mid)) return;
     if (recordedSet.has(mid)) return;
 
