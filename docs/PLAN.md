@@ -505,6 +505,7 @@ not standalone media attachments.
   posterId:    resolvePosterPeerId(bubble),                 // string | null
   content:     extractText(bubble),                        // emoji-stripped, link text preserved
   media:       extractMedia(bubble),                       // string[] — blob/file URLs
+  mediaFiles:  downloadMessageMedia(extractMedia(bubble)), // string[] — local "media/<guid>.ext" paths
   links:       extractLinks(bubble),                       // string[] — unique hrefs
   sessionId:   currentSessionId,                           // set by recording state
   screenshotFile: `${bubble.dataset.mid}.png`,
@@ -676,6 +677,7 @@ This ensures data accuracy even if the screenshot is delayed.
 | `content` | `string` | Plain text, emoji stripped, link text preserved, HTML entities decoded |
 | `timestamp` | `string` | ISO 8601 UTC, derived from `data-timestamp` |
 | `media` | `string[]` | Blob/file URLs of media attachments (photos, videos, GIFs, files) — ephemeral |
+| `mediaFiles` | `string[]` | Local "media/<guid>.ext" paths saved by the extension |
 | `links` | `string[]` | Unique absolute URLs from anchor tags |
 | `screenshotFile` | `string` | Relative filename of PNG in same directory |
 

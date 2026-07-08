@@ -48,6 +48,10 @@ let messages = [];
 let screenshotHandles = new Map();
 /** @type {Map<string, string>} */
 let screenshotBlobUrls = new Map();
+/** @type {Map<string, FileSystemFileHandle>} */
+let mediaHandles = new Map();
+/** @type {Map<string, string>} */
+let mediaBlobUrls = new Map();
 /** @type {Set<string>} */
 let selectedSessionIds = new Set();
 /**
@@ -104,6 +108,8 @@ async function loadDirectory(root) {
   messages = [];
   screenshotHandles = new Map();
   screenshotBlobUrls = new Map();
+  mediaHandles = new Map();
+  mediaBlobUrls = new Map();
   selectedSessionIds = new Set();
 
   // Viewer expects a single group folder, not the telegram-recorder/ root.
@@ -129,6 +135,11 @@ async function loadDirectory(root) {
  */
 async function loadGroupDirectory(groupDir, groupId) {
   for await (const [name, entry] of groupDir.entries()) {
+    if (entry.kind === 'directory' && name === 'media') {
+      await loadMediaDirectory(entry);
+      continue;
+    }
+
     if (entry.kind !== 'file') continue;
 
     if (name.startsWith('manifest-') && name.endsWith('.json')) {
@@ -158,6 +169,23 @@ async function loadGroupDirectory(groupDir, groupId) {
     if (name.endsWith('.png')) {
       const stem = name.replace(/\.png$/i, '');
       screenshotHandles.set(stem, entry);
+    }
+  }
+}
+
+/**
+ * Load all files from the group's media/ folder.
+ * Files are keyed by their full name and by the GUID stem (name without
+ * extension) so they can be matched against blob URLs.
+ * @param {FileSystemDirectoryHandle} mediaDir
+ */
+async function loadMediaDirectory(mediaDir) {
+  for await (const [name, entry] of mediaDir.entries()) {
+    if (entry.kind !== 'file') continue;
+    mediaHandles.set(name, entry);
+    const stem = name.replace(/\.[^.]+$/, '');
+    if (stem && stem !== name) {
+      mediaHandles.set(stem, entry);
     }
   }
 }
@@ -641,6 +669,28 @@ function createContentCell(content) {
   return td;
 }
 
+function extractBlobGuid(url) {
+  try {
+    return new URL(url).pathname.split('/').pop() || '';
+  } catch {
+    return '';
+  }
+}
+
+async function openLocalMedia(guid, event) {
+  event.preventDefault();
+  const handle = mediaHandles.get(guid);
+  if (!handle) return;
+  try {
+    const file = await handle.getFile();
+    const objectUrl = URL.createObjectURL(file);
+    mediaBlobUrls.set(objectUrl, true);
+    window.open(objectUrl, '_blank');
+  } catch (err) {
+    console.error('[TelegramRecorder] failed to open local media', guid, err);
+  }
+}
+
 function createMediaCell(media) {
   const td = document.createElement('td');
   td.className = 'media-cell';
@@ -653,12 +703,22 @@ function createMediaCell(media) {
   count.textContent = `${media.length} media item${media.length === 1 ? '' : 's'}`;
   td.appendChild(count);
   for (const url of media) {
+    const guid = extractBlobGuid(url);
+    const localHandle = guid ? mediaHandles.get(guid) : null;
+
     const a = document.createElement('a');
-    a.href = url;
-    a.textContent = url;
-    a.title = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
+    if (localHandle) {
+      a.href = '#';
+      a.textContent = `${guid} (local)`;
+      a.title = `Open downloaded media: ${guid}`;
+      a.addEventListener('click', e => openLocalMedia(guid, e));
+    } else {
+      a.href = url;
+      a.textContent = url;
+      a.title = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+    }
     td.appendChild(a);
   }
   return td;
@@ -991,6 +1051,9 @@ document.addEventListener('keydown', e => {
 
 window.addEventListener('beforeunload', () => {
   for (const url of screenshotBlobUrls.values()) {
+    URL.revokeObjectURL(url);
+  }
+  for (const url of mediaBlobUrls.keys()) {
     URL.revokeObjectURL(url);
   }
 });

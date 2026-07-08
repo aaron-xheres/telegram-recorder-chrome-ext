@@ -31,6 +31,7 @@
   var navPollInterval = null;
   var lastLocationHref = location.href;
   var eventAbortController = new AbortController();
+  var downloadMediaEnabled = true;
 
   /** @type {MutationObserver|null} */
   var bubblesObserver = null;
@@ -153,6 +154,93 @@
       if (text) return text;
     }
     return null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Media download helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Map common MIME types to file extensions.
+   * @param {string} mime
+   * @returns {string}
+   */
+  function extFromMime(mime) {
+    const map = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+      'video/mp4': 'mp4',
+      'video/webm': 'webm',
+      'video/quicktime': 'mov',
+      'audio/mpeg': 'mp3',
+      'audio/ogg': 'ogg',
+      'application/pdf': 'pdf'
+    };
+    return map[mime?.toLowerCase()] ?? '';
+  }
+
+  /**
+   * Download a single media blob to the background service worker.
+   * @param {string} url
+   * @param {string} groupId
+   * @returns {Promise<string|null>} Relative path inside the group folder, e.g. "media/<guid>.ext".
+   */
+  async function downloadMediaItem(url, groupId) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.warn('[TelegramRecorder] failed to fetch media', url, response.status);
+        return null;
+      }
+      const blob = await response.blob();
+      const guid = url.split('/').pop() || 'unknown';
+      const ext = extFromMime(blob.type);
+      const filename = ext ? `${guid}.${ext}` : guid;
+
+      const dlResponse = await chrome.runtime.sendMessage({
+        type: CONTENT_MSG.DOWNLOAD_MEDIA,
+        groupId,
+        filename,
+        blob
+      });
+
+      if (!dlResponse || !dlResponse.ok) {
+        console.warn('[TelegramRecorder] background media download failed', url, dlResponse);
+        return null;
+      }
+      return `media/${filename}`;
+    } catch (err) {
+      console.warn('[TelegramRecorder] downloadMediaItem failed', url, err);
+      return null;
+    }
+  }
+
+  /**
+   * Download all media attachments for a message when the setting is enabled.
+   * @param {string[]} media
+   * @param {string} groupId
+   * @returns {Promise<string[]>}
+   */
+  async function downloadMessageMedia(media, groupId) {
+    if (!downloadMediaEnabled || !media || media.length === 0) return [];
+    const results = await Promise.all(media.map(url => downloadMediaItem(url, groupId)));
+    return results.filter(Boolean);
+  }
+
+  /**
+   * Load the download-media preference from storage.
+   */
+  async function loadDownloadMediaSetting() {
+    try {
+      const result = await chrome.storage.local.get('downloadMedia');
+      downloadMediaEnabled = result.downloadMedia !== false;
+    } catch (err) {
+      console.error('[TelegramRecorder] failed to load download media setting', err);
+      downloadMediaEnabled = true;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -293,7 +381,13 @@
     if (!messageData.groupId || messageData.groupId !== currentGroupId) {
       messageData.groupId = currentGroupId;
     }
-    console.log('[TelegramRecorder] queued new message', mid, messageData.posterName);
+
+    messageData.mediaFiles = await downloadMessageMedia(messageData.media, currentGroupId);
+
+    console.log('[TelegramRecorder] queued new message', mid, messageData.posterName, {
+      media: messageData.media?.length,
+      mediaFiles: messageData.mediaFiles?.length
+    });
     enqueue(bubble, messageData);
   }
 
@@ -459,6 +553,8 @@
   // ---------------------------------------------------------------------------
 
   (async function rehydrate() {
+    await loadDownloadMediaSetting();
+
     try {
       const response = await chrome.runtime.sendMessage({ type: CONTENT_MSG.GET_SESSION });
       const session = response?.session;
@@ -474,6 +570,12 @@
       console.error('[TelegramRecorder] session rehydration failed', err);
     }
   })();
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.downloadMedia) {
+      downloadMediaEnabled = changes.downloadMedia.newValue !== false;
+    }
+  });
 
   // ---------------------------------------------------------------------------
   // Cleanup registration for future reinjection

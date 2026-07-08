@@ -12,6 +12,7 @@
  * @property {string} timestamp
  * @property {string[]} media
  * @property {string[]} links
+ * @property {string[]} mediaFiles
  * @property {string|null} screenshotFile
  */
 
