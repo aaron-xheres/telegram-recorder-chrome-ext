@@ -411,6 +411,14 @@
   }
 
   /**
+   * @param {number} ms
+   * @returns {Promise<void>}
+   */
+  function sleep(ms) {
+    return new Promise(resolve => window.setTimeout(resolve, ms));
+  }
+
+  /**
    * @param {Element} bubble
    */
   async function processBubbleNode(bubble) {
@@ -429,11 +437,24 @@
     }
 
     recordedSet.add(mid);
-    const messageData = await extract(bubble, currentSessionId);
+    let messageData = await extract(bubble, currentSessionId);
     // Ensure every record in this session uses the same group identifier
     // (numeric peer ID or sanitized @username) as the manifest/folder.
     if (!messageData.groupId || messageData.groupId !== currentGroupId) {
       messageData.groupId = currentGroupId;
+    }
+
+    // If the bubble looks like it should have media but none was found, wait a
+    // bit longer for Telegram to inject the lazy <img> before saving.
+    const looksLikeMedia = ['photo', 'video', 'document', 'audio', 'voice', 'sticker', 'gif'].some(cls =>
+      bubble.classList.contains(cls)
+    );
+    if (looksLikeMedia && (messageData.media?.length ?? 0) === 0) {
+      await sleep(1000);
+      const reMedia = await extractMedia(bubble);
+      if (reMedia.length > 0) {
+        messageData = { ...messageData, media: reMedia };
+      }
     }
 
     messageData.mediaFiles = await downloadMessageMedia(messageData.media, currentGroupId);
@@ -443,33 +464,6 @@
       mediaFiles: messageData.mediaFiles?.length
     });
     enqueue(bubble, messageData);
-
-    // If the bubble looks like it should have media but none was found, retry
-    // after a short delay. Telegram often injects the real <img> lazily after
-    // the bubble first appears.
-    const looksLikeMedia = ['photo', 'video', 'document', 'audio', 'voice', 'sticker', 'gif'].some(cls =>
-      bubble.classList.contains(cls)
-    );
-    if (looksLikeMedia && (messageData.media?.length ?? 0) === 0) {
-      window.setTimeout(async () => {
-        if (!isRecording) return;
-        const reMedia = await extractMedia(bubble);
-        if (reMedia.length === 0) return;
-
-        const updated = { ...messageData, media: reMedia };
-        updated.mediaFiles = await downloadMessageMedia(reMedia, currentGroupId);
-        try {
-          await chrome.runtime.sendMessage({
-            type: CONTENT_MSG.SAVE_FILES,
-            messageData: updated,
-            croppedDataUrl: null
-          });
-          console.log('[TelegramRecorder] updated media for message', mid, reMedia.length);
-        } catch (err) {
-          console.error('[TelegramRecorder] failed to update media for message', mid, err);
-        }
-      }, 1500);
-    }
   }
 
   // ---------------------------------------------------------------------------
