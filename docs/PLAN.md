@@ -494,6 +494,10 @@ reference but will be dead after the tab is closed. The screenshot captures medi
 Stickers and custom emoji are excluded from `media[]` because they are part of the message text,
 not standalone media attachments.
 
+Telegram renders animated GIFs as silent videos inside a `.media-gif-wrapper`. That wrapper also
+contains a static JPEG poster image (`<img class="media-photo">`). The poster must be skipped so
+that the actual video blob is captured; otherwise the JPEG thumbnail is saved instead of the GIF.
+
 ### 6.4 Complete Extraction Object
 
 ```js

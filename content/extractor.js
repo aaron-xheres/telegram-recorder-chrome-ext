@@ -284,10 +284,15 @@ async function extractMedia(bubble) {
       const w = img.naturalWidth || img.width || 0;
       const h = img.naturalHeight || img.height || 0;
       if (w > 0 && h > 0 && (w < 32 || h < 32)) return;
-      // If the same wrapper already has a blob video, this image is just a
-      // static thumbnail/poster; prefer the actual video.
+      // If an image sits inside a .media-gif-wrapper it is a static poster/thumbnail
+      // for a GIF that Telegram renders as a video. Skip it so the wait-for-media
+      // path can capture the actual video blob, even if it has not been injected yet.
+      // Also skip any image whose wrapper already contains a blob video.
       const mediaWrapper = img.closest('.media-container, .media-gif-wrapper, .attachment');
-      if (mediaWrapper && mediaWrapper.querySelector('video[src^="blob:"]')) return;
+      if (mediaWrapper && (
+        mediaWrapper.classList.contains('media-gif-wrapper') ||
+        mediaWrapper.querySelector('video[src^="blob:"]')
+      )) return;
       seen.add(src);
       media.push(src);
     });

@@ -114,6 +114,7 @@ bun build shared/messages.js content/*.js background/*.js popup/*.js viewer/*.js
 - Targets **Telegram Web K** only. Web A / Web Z will be detected and you can be redirected to Web K.
 - Screenshots require the Telegram tab to be visible (active).
 - Inline media blob URLs stored in JSON are ephemeral and expire when the tab is closed; the PNG screenshot remains.
+- Telegram "GIFs" are saved as the underlying video format (usually MP4/WebM), not as `.gif` files.
 - Icon assets are not included by default — add `icons/icon-16.png`, `icons/icon-48.png`, and `icons/icon-128.png` then update `manifest.json` if desired.
 
 ## License
