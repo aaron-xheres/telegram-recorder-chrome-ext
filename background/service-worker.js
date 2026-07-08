@@ -199,16 +199,18 @@ function blobToDataUrl(blob) {
 }
 
 /**
- * Download a media Blob into the group's media/ folder.
+ * Download a media buffer into the group's media/ folder.
  * @param {string} groupId
  * @param {string} filename
- * @param {Blob} blob
+ * @param {ArrayBuffer} buffer
+ * @param {string} mimeType
  */
-async function saveMediaBlob(groupId, filename, blob) {
-  if (!groupId || !filename || !blob) {
-    throw new Error('Missing groupId, filename, or blob');
+async function saveMediaBlob(groupId, filename, buffer, mimeType) {
+  if (!groupId || !filename || !buffer) {
+    throw new Error('Missing groupId, filename, or buffer');
   }
 
+  const blob = new Blob([buffer], { type: mimeType || 'application/octet-stream' });
   const dataUrl = await blobToDataUrl(blob);
   await chrome.downloads.download({
     url: dataUrl,
@@ -449,13 +451,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     case MSG.DOWNLOAD_MEDIA: {
-      const { groupId, filename, blob } = message;
-      if (!groupId || !filename || !blob) {
-        sendResponse({ ok: false, error: 'Missing groupId, filename, or blob' });
+      const { groupId, filename, buffer, mimeType } = message;
+      if (!groupId || !filename || !buffer) {
+        sendResponse({ ok: false, error: 'Missing groupId, filename, or buffer' });
         break;
       }
       handleAsync(
-        saveMediaBlob(groupId, filename, blob)
+        saveMediaBlob(groupId, filename, buffer, mimeType)
           .then(() => ({ ok: true }))
       );
       return true;

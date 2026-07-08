@@ -32,6 +32,8 @@
   var lastLocationHref = location.href;
   var eventAbortController = new AbortController();
   var downloadMediaEnabled = true;
+  /** @type {Map<string, string>} */
+  var downloadedMediaGuids = new Map();
 
   /** @type {MutationObserver|null} */
   var bubblesObserver = null;
@@ -182,6 +184,38 @@
     return map[mime?.toLowerCase()] ?? '';
   }
 
+  const DOWNLOADED_MEDIA_KEY = 'downloadedMedia';
+
+  /**
+   * Load the set of already-downloaded media GUIDs from storage.
+   */
+  async function loadDownloadedMediaGuids() {
+    try {
+      const result = await chrome.storage.local.get(DOWNLOADED_MEDIA_KEY);
+      const map = result[DOWNLOADED_MEDIA_KEY] ?? {};
+      downloadedMediaGuids = new Map(Object.entries(map));
+    } catch (err) {
+      console.error('[TelegramRecorder] failed to load downloaded media guids', err);
+      downloadedMediaGuids = new Map();
+    }
+  }
+
+  /**
+   * Persist a newly downloaded GUID so it is not re-downloaded this session.
+   * @param {string} guid
+   * @param {string} filename
+   */
+  async function persistDownloadedMediaGuid(guid, filename) {
+    try {
+      const result = await chrome.storage.local.get(DOWNLOADED_MEDIA_KEY);
+      const map = result[DOWNLOADED_MEDIA_KEY] ?? {};
+      map[guid] = filename;
+      await chrome.storage.local.set({ [DOWNLOADED_MEDIA_KEY]: map });
+    } catch (err) {
+      console.error('[TelegramRecorder] failed to persist downloaded media guid', guid, err);
+    }
+  }
+
   /**
    * Download a single media blob to the background service worker.
    * Only blob: URLs are downloaded locally; remote URLs (e.g. t.me links)
@@ -196,6 +230,13 @@
       return null;
     }
 
+    const guid = url.split('/').pop() || 'unknown';
+    if (downloadedMediaGuids.has(guid)) {
+      const filename = downloadedMediaGuids.get(guid);
+      console.log('[TelegramRecorder] media already downloaded, skipping', guid);
+      return `media/${filename}`;
+    }
+
     try {
       const response = await fetch(url);
       if (!response.ok) {
@@ -203,21 +244,27 @@
         return null;
       }
       const blob = await response.blob();
-      const guid = url.split('/').pop() || 'unknown';
       const ext = extFromMime(blob.type);
       const filename = ext ? `${guid}.${ext}` : guid;
+      const buffer = await blob.arrayBuffer();
 
       const dlResponse = await chrome.runtime.sendMessage({
         type: CONTENT_MSG.DOWNLOAD_MEDIA,
         groupId,
         filename,
-        blob
+        mimeType: blob.type || 'application/octet-stream',
+        buffer
       });
 
       if (!dlResponse || !dlResponse.ok) {
         console.warn('[TelegramRecorder] background media download failed', url, dlResponse);
         return null;
       }
+
+      downloadedMediaGuids.set(guid, filename);
+      persistDownloadedMediaGuid(guid, filename).catch(err => {
+        console.warn('[TelegramRecorder] failed to persist downloaded guid', guid, err);
+      });
       return `media/${filename}`;
     } catch (err) {
       console.warn('[TelegramRecorder] downloadMediaItem failed', url, err);
@@ -588,6 +635,7 @@
 
   (async function rehydrate() {
     await loadDownloadMediaSetting();
+    await loadDownloadedMediaGuids();
 
     try {
       const response = await chrome.runtime.sendMessage({ type: CONTENT_MSG.GET_SESSION });
