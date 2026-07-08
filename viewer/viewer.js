@@ -830,21 +830,46 @@ function mimeFromFilename(filename) {
   return map[ext] || '';
 }
 
+function detectMimeFromBuffer(buffer) {
+  if (!buffer || buffer.byteLength < 8) return '';
+  const bytes = new Uint8Array(buffer);
+  const hex = Array.from(bytes.slice(0, 8))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  if (hex.startsWith('ffd8ff')) return 'image/jpeg';
+  if (hex.startsWith('89504e47')) return 'image/png';
+  if (hex.startsWith('47494638')) return 'image/gif';
+  if (hex.startsWith('25504446')) return 'application/pdf';
+  if (hex.startsWith('000000') && bytes.length > 11) {
+    const ftyp = String.fromCharCode(...bytes.slice(4, 8));
+    if (ftyp === 'ftyp') return 'video/mp4';
+  }
+
+  if (buffer.byteLength >= 12) {
+    const riff = String.fromCharCode(...bytes.slice(0, 4));
+    const webp = String.fromCharCode(...bytes.slice(8, 12));
+    if (riff === 'RIFF' && webp === 'WEBP') return 'image/webp';
+  }
+
+  return '';
+}
+
 async function openMediaViewer(guid) {
   const handle = mediaHandles.get(guid);
   if (!handle) return;
   try {
     const file = await handle.getFile();
-    let mime = file.type || mimeFromFilename(handle.name);
+    const buffer = await file.arrayBuffer();
+    let mime = file.type || mimeFromFilename(handle.name) || detectMimeFromBuffer(buffer);
     if (!mime) {
-      // Last resort: treat unknown files as octet-stream and open externally.
+      // Last resort: open externally without a preview.
       const objectUrl = URL.createObjectURL(file);
       window.open(objectUrl, '_blank');
       URL.revokeObjectURL(objectUrl);
       return;
     }
 
-    const buffer = await file.arrayBuffer();
     const blob = new Blob([buffer], { type: mime });
     const objectUrl = URL.createObjectURL(blob);
     currentMediaObjectUrl = objectUrl;

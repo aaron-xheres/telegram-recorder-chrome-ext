@@ -184,6 +184,37 @@
     return map[mime?.toLowerCase()] ?? '';
   }
 
+  /**
+   * Detect MIME type from file magic bytes when the browser/OS cannot.
+   * @param {ArrayBuffer} buffer
+   * @returns {string}
+   */
+  function detectMimeFromBuffer(buffer) {
+    if (!buffer || buffer.byteLength < 8) return '';
+    const bytes = new Uint8Array(buffer);
+    const hex = Array.from(bytes.slice(0, 8))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    if (hex.startsWith('ffd8ff')) return 'image/jpeg';
+    if (hex.startsWith('89504e47')) return 'image/png';
+    if (hex.startsWith('47494638')) return 'image/gif';
+    if (hex.startsWith('25504446')) return 'application/pdf';
+    if (hex.startsWith('000000') && bytes.length > 11) {
+      const ftyp = String.fromCharCode(...bytes.slice(4, 8));
+      if (ftyp === 'ftyp') return 'video/mp4';
+    }
+
+    // WebP: "RIFF" at 0, "WEBP" at 8
+    if (buffer.byteLength >= 12) {
+      const riff = String.fromCharCode(...bytes.slice(0, 4));
+      const webp = String.fromCharCode(...bytes.slice(8, 12));
+      if (riff === 'RIFF' && webp === 'WEBP') return 'image/webp';
+    }
+
+    return '';
+  }
+
   const DOWNLOADED_MEDIA_KEY = 'downloadedMedia';
 
   /**
@@ -244,15 +275,18 @@
         return null;
       }
       const blob = await response.blob();
-      const ext = extFromMime(blob.type);
-      const filename = ext ? `${guid}.${ext}` : guid;
       const buffer = await blob.arrayBuffer();
+      const mime = blob.type && blob.type !== 'application/octet-stream'
+        ? blob.type
+        : detectMimeFromBuffer(buffer);
+      const ext = extFromMime(mime);
+      const filename = ext ? `${guid}.${ext}` : guid;
 
       const dlResponse = await chrome.runtime.sendMessage({
         type: CONTENT_MSG.DOWNLOAD_MEDIA,
         groupId,
         filename,
-        mimeType: blob.type || 'application/octet-stream',
+        mimeType: mime || blob.type || 'application/octet-stream',
         buffer
       });
 
