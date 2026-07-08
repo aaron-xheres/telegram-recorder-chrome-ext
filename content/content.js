@@ -368,8 +368,9 @@
 
   /**
    * Wait for media-relevant <img>/<video> elements inside a bubble to finish
-   * loading. Uses a MutationObserver to catch late-injected media and resolves
-   * after a short quiet period once everything is complete.
+   * loading. Uses a MutationObserver to catch late-injected media and late-set
+   * src attributes, resolving after a short quiet period once everything is
+   * complete.
    * Avatars, emoji, and custom-emoji stickers are ignored so that a slow or
    * broken avatar/emoji image cannot block the actual media attachment.
    * @param {Element} bubble
@@ -420,15 +421,22 @@
         return imagesReady && videosReady;
       }
 
-      function hasAddedMedia(mutations) {
-        return mutations.some(mutation =>
-          Array.from(mutation.addedNodes).some(node => {
-            if (node.nodeType !== Node.ELEMENT_NODE) return false;
-            const el = /** @type {Element} */ (node);
-            if (el.closest?.(excludeSelectors)) return false;
-            return el.matches?.('img, video') || el.querySelector?.('img, video') != null;
-          })
-        );
+      function mediaChanged(mutations) {
+        return mutations.some(mutation => {
+          if (mutation.type === 'childList') {
+            return Array.from(mutation.addedNodes).some(node => {
+              if (node.nodeType !== Node.ELEMENT_NODE) return false;
+              const el = /** @type {Element} */ (node);
+              if (el.closest?.(excludeSelectors)) return false;
+              return el.matches?.('img, video') || el.querySelector?.('img, video') != null;
+            });
+          }
+          if (mutation.type === 'attributes' && mutation.attributeName === 'src') {
+            const target = mutation.target;
+            return target.matches?.('img, video') && !target.closest?.(excludeSelectors);
+          }
+          return false;
+        });
       }
 
       function tryResolve() {
@@ -444,13 +452,18 @@
       }
 
       const observer = new MutationObserver(mutations => {
-        if (hasAddedMedia(mutations)) {
+        if (mediaChanged(mutations)) {
           clearTimeout(quietTimer);
           tryResolve();
         }
       });
 
-      observer.observe(bubble, { childList: true, subtree: true });
+      observer.observe(bubble, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['src']
+      });
       tryResolve();
 
       window.setTimeout(() => {
