@@ -298,6 +298,75 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Media readiness helper
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Wait for all <img>/<video> elements inside a bubble to finish loading.
+   * Uses a MutationObserver to catch late-injected media and resolves after a
+   * short quiet period once everything is complete.
+   * @param {Element} bubble
+   * @param {number} timeoutMs
+   * @returns {Promise<void>}
+   */
+  function waitForMediaReady(bubble, timeoutMs = 3000) {
+    return new Promise(resolve => {
+      const deadline = Date.now() + timeoutMs;
+      let quietTimer = null;
+      let settled = false;
+
+      function isMediaComplete() {
+        const imgs = bubble.querySelectorAll('img');
+        const videos = bubble.querySelectorAll('video');
+        return (
+          Array.from(imgs).every(img => img.complete) &&
+          Array.from(videos).every(video => video.readyState >= 1)
+        );
+      }
+
+      function hasAddedMedia(mutations) {
+        return mutations.some(mutation =>
+          Array.from(mutation.addedNodes).some(node => {
+            if (node.nodeType !== Node.ELEMENT_NODE) return false;
+            const el = /** @type {Element} */ (node);
+            return el.matches?.('img, video') || el.querySelector?.('img, video') != null;
+          })
+        );
+      }
+
+      function tryResolve() {
+        if (settled) return;
+        if (!isMediaComplete()) return;
+        clearTimeout(quietTimer);
+        quietTimer = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          observer.disconnect();
+          resolve();
+        }, 300);
+      }
+
+      const observer = new MutationObserver(mutations => {
+        if (hasAddedMedia(mutations)) {
+          clearTimeout(quietTimer);
+          tryResolve();
+        }
+      });
+
+      observer.observe(bubble, { childList: true, subtree: true });
+      tryResolve();
+
+      window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        observer.disconnect();
+        clearTimeout(quietTimer);
+        resolve();
+      }, timeoutMs);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Queue / screenshot pipeline
   // ---------------------------------------------------------------------------
 
@@ -444,13 +513,14 @@
       messageData.groupId = currentGroupId;
     }
 
-    // If the bubble looks like it should have media but none was found, wait a
-    // bit longer for Telegram to inject the lazy <img> before saving.
+    // If the bubble looks like it should have media but none was found, wait
+    // for the actual <img>/<video> elements to be injected and loaded before
+    // saving. This is driven by DOM/network readiness rather than a fixed timer.
     const looksLikeMedia = ['photo', 'video', 'document', 'audio', 'voice', 'sticker', 'gif'].some(cls =>
       bubble.classList.contains(cls)
     );
     if (looksLikeMedia && (messageData.media?.length ?? 0) === 0) {
-      await sleep(1000);
+      await waitForMediaReady(bubble, 3000);
       const reMedia = await extractMedia(bubble);
       if (reMedia.length > 0) {
         messageData = { ...messageData, media: reMedia };

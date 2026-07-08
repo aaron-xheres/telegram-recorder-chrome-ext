@@ -243,10 +243,6 @@ async function extractMedia(bubble) {
     const media = [];
     const seen = new Set();
 
-    // Give Telegram a moment to assign lazy src attributes and inject real
-    // <img> elements (it often starts with a <canvas> thumbnail).
-    await new Promise(resolve => window.setTimeout(resolve, 400));
-
     // Wait for any lazy-loading media inside the bubble to settle.
     let imgs = Array.from(bubble.querySelectorAll('img'));
     let videos = Array.from(bubble.querySelectorAll('video'));
