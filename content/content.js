@@ -549,6 +549,33 @@
   }
 
   /**
+   * Determine whether a bubble likely contains standalone media attachments.
+   * Checks both bubble-level classes and actual media wrappers/elements.
+   * Custom-emoji stickers are excluded because they belong to the message text.
+   * @param {Element} bubble
+   * @returns {boolean}
+   */
+  function bubbleHasMedia(bubble) {
+    const mediaClasses = ['photo', 'video', 'document', 'audio', 'voice', 'sticker', 'gif'];
+    if (mediaClasses.some(cls => bubble.classList.contains(cls))) return true;
+
+    // Look for real media wrappers/elements. Avoid catching sticker videos
+    // inside custom-emoji elements — those are text decorations, not attachments.
+    const mediaSelectors = [
+      '.media-gif-wrapper',
+      '.media-container',
+      '.attachment',
+      '.media-photo',
+      '.media-video',
+      'audio'
+    ].join(', ');
+    const candidates = bubble.querySelectorAll(mediaSelectors);
+    return Array.from(candidates).some(el =>
+      !el.closest('custom-emoji-element, custom-emoji-renderer-element')
+    );
+  }
+
+  /**
    * @param {Element} bubble
    */
   async function processBubbleNode(bubble) {
@@ -574,13 +601,10 @@
       messageData.groupId = currentGroupId;
     }
 
-    // If the bubble looks like it should have media but none was found, wait
-    // for the actual <img>/<video> elements to be injected and loaded before
-    // saving. This is driven by DOM/network readiness rather than a fixed timer.
-    const looksLikeMedia = ['photo', 'video', 'document', 'audio', 'voice', 'sticker', 'gif'].some(cls =>
-      bubble.classList.contains(cls)
-    );
-    if (looksLikeMedia && (messageData.media?.length ?? 0) === 0) {
+    // If the bubble contains media, wait for any lazy-loaded/injected elements
+    // (e.g. GIF videos inside .media-gif-wrapper) to settle and re-extract.
+    // This is driven by DOM/network readiness rather than a fixed timer.
+    if (bubbleHasMedia(bubble)) {
       await waitForMediaReady(bubble, 3000);
       const reMedia = await extractMedia(bubble);
       if (reMedia.length > 0) {
