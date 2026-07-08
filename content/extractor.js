@@ -243,9 +243,13 @@ async function extractMedia(bubble) {
     const media = [];
     const seen = new Set();
 
-    // Wait briefly for any lazy-loading media inside the bubble to settle.
-    const imgs = Array.from(bubble.querySelectorAll('img'));
-    const videos = Array.from(bubble.querySelectorAll('video'));
+    // Give Telegram a moment to assign lazy src attributes and inject real
+    // <img> elements (it often starts with a <canvas> thumbnail).
+    await new Promise(resolve => window.setTimeout(resolve, 400));
+
+    // Wait for any lazy-loading media inside the bubble to settle.
+    let imgs = Array.from(bubble.querySelectorAll('img'));
+    let videos = Array.from(bubble.querySelectorAll('video'));
     await Promise.all([
       ...imgs.map(img =>
         img.complete
@@ -267,6 +271,10 @@ async function extractMedia(bubble) {
             })
       )
     ]);
+
+    // Re-query after waiting so any late-inserted images are included.
+    imgs = Array.from(bubble.querySelectorAll('img'));
+    videos = Array.from(bubble.querySelectorAll('video'));
 
     imgs.forEach(img => {
       if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return;
@@ -302,7 +310,15 @@ async function extractMedia(bubble) {
       '.message-photo',
       '.attachment',
       '.thumbnail',
-      '.photo'
+      '.photo',
+      '.media-container',
+      '.message-media',
+      '.photo-container',
+      '.document-thumb',
+      '.video-thumb',
+      '.webpage-preview-photo',
+      '.webpage-photo',
+      '.link-preview-photo'
     ].join(', ');
     bubble.querySelectorAll(bgSelectors).forEach(el => {
       const style = window.getComputedStyle(el);

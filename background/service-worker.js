@@ -184,6 +184,21 @@ async function saveFiles(messageData, croppedDataUrl) {
 }
 
 /**
+ * Convert a Blob to a base64 data URL.
+ * Service workers cannot use URL.createObjectURL, so data URLs are used instead.
+ * @param {Blob} blob
+ * @returns {Promise<string>}
+ */
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
  * Download a media Blob into the group's media/ folder.
  * @param {string} groupId
  * @param {string} filename
@@ -194,18 +209,12 @@ async function saveMediaBlob(groupId, filename, blob) {
     throw new Error('Missing groupId, filename, or blob');
   }
 
-  const objectUrl = URL.createObjectURL(blob);
-  try {
-    await chrome.downloads.download({
-      url: objectUrl,
-      filename: `telegram-recorder/${groupId}/media/${filename}`,
-      saveAs: false
-    });
-  } finally {
-    // Give Chrome a moment to start the download before revoking the object URL.
-    await sleep(1000);
-    URL.revokeObjectURL(objectUrl);
-  }
+  const dataUrl = await blobToDataUrl(blob);
+  await chrome.downloads.download({
+    url: dataUrl,
+    filename: `telegram-recorder/${groupId}/media/${filename}`,
+    saveAs: false
+  });
 }
 
 /**
