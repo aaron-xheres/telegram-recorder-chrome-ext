@@ -230,27 +230,68 @@ function extractLinks(bubble) {
 
 /**
  * Extract media image blob URLs from the bubble.
- * Uses a broad img query and excludes avatars, emoji, and custom-emoji
- * elements. Telegram uses several different wrappers/ classes for photos,
- * so a narrow selector set misses many images.
+ * Waits for contained <img> elements to finish loading, then collects their
+ * sources. Also picks up background-image URLs from Telegram's photo wrappers.
+ * Avatars, emoji, and custom-emoji elements are excluded.
  * @param {Element} bubble
- * @returns {string[]}
+ * @returns {Promise<string[]>}
  */
-function extractMediaImages(bubble) {
+async function extractMediaImages(bubble) {
   try {
     const images = [];
-    bubble.querySelectorAll('img').forEach(img => {
+    const seen = new Set();
+
+    // Wait briefly for any lazy-loading images inside the bubble to settle.
+    const imgs = Array.from(bubble.querySelectorAll('img'));
+    await Promise.all(
+      imgs.map(img =>
+        img.complete
+          ? Promise.resolve()
+          : new Promise(resolve => {
+              img.addEventListener('load', resolve, { once: true });
+              img.addEventListener('error', resolve, { once: true });
+              // Failsafe so extraction is never blocked for more than 500 ms.
+              window.setTimeout(resolve, 500);
+            })
+      )
+    );
+
+    imgs.forEach(img => {
       if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return;
       if (img.closest(MEDIA_IMAGE_EXCLUDE_SELECTORS)) return;
       const src = img.currentSrc || img.src;
       if (!src) return;
-      if (images.includes(src)) return;
-      // Skip tiny icons/decorations.
+      if (seen.has(src)) return;
+      // Skip transparent placeholder data URIs used for lazy loading.
+      if (src.startsWith('data:image/gif;base64,')) return;
+      // Skip tiny images (<32px) to avoid icons/decorations.
       const w = img.naturalWidth || img.width || 0;
       const h = img.naturalHeight || img.height || 0;
       if (w > 0 && h > 0 && (w < 32 || h < 32)) return;
+      seen.add(src);
       images.push(src);
     });
+
+    // Telegram sometimes renders photos as divs with background-image.
+    const bgSelectors = [
+      '.media-photo',
+      '.message-photo',
+      '.attachment',
+      '.thumbnail',
+      '.photo'
+    ].join(', ');
+    bubble.querySelectorAll(bgSelectors).forEach(el => {
+      const style = window.getComputedStyle(el);
+      const bg = style.backgroundImage;
+      if (!bg || bg === 'none') return;
+      const match = bg.match(/url\(["']?(blob:[^"')]+)["']?\)/);
+      if (!match) return;
+      const url = match[1];
+      if (seen.has(url)) return;
+      seen.add(url);
+      images.push(url);
+    });
+
     return images;
   } catch (err) {
     console.error('[TelegramRecorder] extractMediaImages failed', err);
@@ -262,9 +303,9 @@ function extractMediaImages(bubble) {
  * Orchestrate extraction of a full message record.
  * @param {Element} bubble
  * @param {string} sessionId
- * @returns {MessageRecord}
+ * @returns {Promise<MessageRecord>}
  */
-function extract(bubble, sessionId) {
+async function extract(bubble, sessionId) {
   try {
     const messageId = bubble.dataset.mid ?? null;
     const groupId = bubble.dataset.peerId ?? null;
@@ -289,7 +330,7 @@ function extract(bubble, sessionId) {
     }
 
     let content = extractText(bubble);
-    let images = extractMediaImages(bubble);
+    let images = await extractMediaImages(bubble);
     let links = extractLinks(bubble);
 
     const record = {

@@ -271,7 +271,7 @@
   /**
    * @param {Element} bubble
    */
-  function processBubbleNode(bubble) {
+  async function processBubbleNode(bubble) {
     const mid = bubble.dataset.mid;
     if (!mid) {
       console.log('[TelegramRecorder] skipped bubble without data-mid (system/service message)');
@@ -287,7 +287,7 @@
     }
 
     recordedSet.add(mid);
-    const messageData = extract(bubble, currentSessionId);
+    const messageData = await extract(bubble, currentSessionId);
     // Ensure every record in this session uses the same group identifier
     // (numeric peer ID or sanitized @username) as the manifest/folder.
     if (!messageData.groupId || messageData.groupId !== currentGroupId) {
