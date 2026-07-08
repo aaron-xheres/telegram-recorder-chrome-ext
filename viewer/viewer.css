@@ -428,9 +428,23 @@ body {
   margin-bottom: 4px;
 }
 
-.media-cell a {
+.media-cell a,
+.media-cell .media-link-button {
   display: block;
   margin-bottom: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2563eb;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.media-cell .media-link-button:hover {
+  color: #1d4ed8;
 }
 
 .screenshot-thumb {
