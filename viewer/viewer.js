@@ -841,9 +841,20 @@ function detectMimeFromBuffer(buffer) {
   if (hex.startsWith('89504e47')) return 'image/png';
   if (hex.startsWith('47494638')) return 'image/gif';
   if (hex.startsWith('25504446')) return 'application/pdf';
-  if (hex.startsWith('000000') && bytes.length > 11) {
+
+  if (buffer.byteLength > 11) {
     const ftyp = String.fromCharCode(...bytes.slice(4, 8));
-    if (ftyp === 'ftyp') return 'video/mp4';
+    if (ftyp === 'ftyp') {
+      const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
+      if (brand.startsWith('qt')) return 'video/quicktime';
+      return 'video/mp4';
+    }
+  }
+
+  if (hex.startsWith('1a45dfa3')) return 'video/webm';
+
+  if (String.fromCharCode(...bytes.slice(0, 4)) === 'OggS') {
+    return 'audio/ogg';
   }
 
   if (buffer.byteLength >= 12) {

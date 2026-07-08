@@ -200,9 +200,23 @@
     if (hex.startsWith('89504e47')) return 'image/png';
     if (hex.startsWith('47494638')) return 'image/gif';
     if (hex.startsWith('25504446')) return 'application/pdf';
-    if (hex.startsWith('000000') && bytes.length > 11) {
+
+    // MP4/MOV: starts with a 4-byte size then "ftyp"
+    if (buffer.byteLength > 11) {
       const ftyp = String.fromCharCode(...bytes.slice(4, 8));
-      if (ftyp === 'ftyp') return 'video/mp4';
+      if (ftyp === 'ftyp') {
+        const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
+        if (brand.startsWith('qt')) return 'video/quicktime';
+        return 'video/mp4';
+      }
+    }
+
+    // WebM: 0x1A 0x45 0xDF 0xA3
+    if (hex.startsWith('1a45dfa3')) return 'video/webm';
+
+    // Ogg: "OggS"
+    if (String.fromCharCode(...bytes.slice(0, 4)) === 'OggS') {
+      return 'audio/ogg';
     }
 
     // WebP: "RIFF" at 0, "WEBP" at 8
