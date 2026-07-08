@@ -30,6 +30,7 @@ let activeTabUrl = '';
 let activeSessions = [];
 /** @type {object|null} */
 let currentSession = null;
+let renderGeneration = 0;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -131,6 +132,8 @@ async function fetchActiveSessions() {
 // ---------------------------------------------------------------------------
 
 function render() {
+  const currentRender = ++renderGeneration;
+
   // Reset sections.
   setVisible(els.noticeSection, false);
   setVisible(els.switchWebK, false);
@@ -183,6 +186,8 @@ function render() {
 
   // Update group info asynchronously.
   groupInfo.then(async info => {
+    if (currentRender !== renderGeneration) return;
+
     const hasGroup = Boolean(info.groupId);
     if (!isRecording) {
       els.groupName.textContent = hasGroup

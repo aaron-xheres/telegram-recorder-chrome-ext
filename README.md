@@ -85,7 +85,9 @@ telegram-recorder-chrome-ext/
 ├── content/
 │   ├── content.js
 │   ├── extractor.js
-│   └── screenshot.js
+│   ├── screenshot.js
+│   ├── screenshot-canvas.js
+│   └── screenshot-tab.js
 ├── popup/
 │   ├── popup.html
 │   ├── popup.js

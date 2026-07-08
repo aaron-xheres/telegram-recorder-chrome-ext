@@ -37,7 +37,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["viewer/*", "popup/*"],
+      "resources": ["viewer/*"],
       "matches": ["<all_urls>"]
     }
   ]

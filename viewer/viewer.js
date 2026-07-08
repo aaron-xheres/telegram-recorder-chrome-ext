@@ -53,8 +53,6 @@ let screenshotHandles = new Map();
 let screenshotBlobUrls = new Map();
 /** @type {Map<string, FileSystemFileHandle>} */
 let mediaHandles = new Map();
-/** @type {Map<string, string>} */
-let mediaBlobUrls = new Map();
 /** @type {Set<string>} */
 let selectedSessionIds = new Set();
 /**
@@ -112,7 +110,6 @@ async function loadDirectory(root) {
   screenshotHandles = new Map();
   screenshotBlobUrls = new Map();
   mediaHandles = new Map();
-  mediaBlobUrls = new Map();
   selectedSessionIds = new Set();
 
   // Viewer expects a single group folder, not the telegram-recorder/ root.
@@ -619,7 +616,7 @@ function renderTable() {
     tr.appendChild(createPosterNameCell(record.posterName));
     tr.appendChild(createIdCell(record.posterId));
     tr.appendChild(createContentCell(record.content));
-    tr.appendChild(createMediaCell(record.media ?? record.images));
+    tr.appendChild(createMediaCell(record.media));
     tr.appendChild(createLinksCell(record.links));
     tr.appendChild(createScreenshotCell(record.messageId));
 
@@ -762,6 +759,10 @@ function createScreenshotCell(messageId) {
 
 async function loadThumbnail(messageId, handle, img) {
   try {
+    if (screenshotBlobUrls.has(messageId)) {
+      img.src = screenshotBlobUrls.get(messageId);
+      return;
+    }
     const file = await handle.getFile();
     const url = URL.createObjectURL(file);
     screenshotBlobUrls.set(messageId, url);
@@ -1164,9 +1165,6 @@ document.addEventListener('keydown', e => {
 
 window.addEventListener('beforeunload', () => {
   for (const url of screenshotBlobUrls.values()) {
-    URL.revokeObjectURL(url);
-  }
-  for (const url of mediaBlobUrls.keys()) {
     URL.revokeObjectURL(url);
   }
 });

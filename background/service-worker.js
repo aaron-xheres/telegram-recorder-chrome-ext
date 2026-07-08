@@ -164,9 +164,13 @@ async function saveFiles(messageData, croppedDataUrl) {
         url: croppedDataUrl,
         filename: `telegram-recorder/${groupId}/${messageId}.png`,
         saveAs: false
-      }).catch(err => {
-        console.error(`[TelegramRecorder] PNG download failed for ${messageId}`, err);
-      })
+      }).then(
+        downloadId => ({ ok: true, type: 'png', downloadId }),
+        err => {
+          console.error(`[TelegramRecorder] PNG download failed for ${messageId}`, err);
+          return { ok: false, type: 'png', error: err?.message ?? String(err) };
+        }
+      )
     );
   }
 
@@ -175,12 +179,23 @@ async function saveFiles(messageData, croppedDataUrl) {
       url: jsonDataUrl(messageData),
       filename: `telegram-recorder/${groupId}/${messageId}.json`,
       saveAs: false
-    }).catch(err => {
-      console.error(`[TelegramRecorder] JSON download failed for ${messageId}`, err);
-    })
+    }).then(
+      downloadId => ({ ok: true, type: 'json', downloadId }),
+      err => {
+        console.error(`[TelegramRecorder] JSON download failed for ${messageId}`, err);
+        return { ok: false, type: 'json', error: err?.message ?? String(err) };
+      }
+    )
   );
 
-  await Promise.all(downloads);
+  const results = await Promise.all(downloads);
+  const failures = results.filter(r => !r.ok);
+  if (failures.length > 0) {
+    throw new Error(
+      `Failed to save ${failures.map(f => f.type).join(', ')} for ${messageId}: ` +
+      failures.map(f => f.error).join('; ')
+    );
+  }
 }
 
 /**
@@ -314,11 +329,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   switch (message.type) {
-    case MSG.GET_GROUP_INFO:
-      // Forwarded to content script by popup via background for routing stability.
-      sendResponse({ ok: false, error: 'Not implemented yet' });
-      break;
-
     case MSG.GET_SESSION:
       sendResponse({ ok: true, session: getSessionByTabId(tabId ?? -1) });
       break;

@@ -703,7 +703,7 @@ Downloads/
         └── 5000012345.png
 ```
 
-Viewer opens the `telegram-recorder/` root. Subdirectories are enumerated as groups.
+Viewer opens a single group folder (e.g. `telegram-recorder/-2350891274`).
 
 ---
 
@@ -794,16 +794,14 @@ User must manually start a new recording session on the new chat.
 ```
 User opens viewer.html → clicks "Open Folder"
   → window.showDirectoryPicker({ mode: 'read' })
-  → User selects telegram-recorder/ root directory
-  → Iterate top-level entries:
-      for each subdirectory (groupId folder):
-        read all files within:
-          manifest-*.json  → parse → sessions map for this group
-          *.json (non-manifest) → parse → messages array
-          *.png            → index by stem (messageId) for screenshot lookup
-  → Merge all groups into unified data store:
-      sessions: Map<sessionId, SessionManifest>
-      messages: MessageRecord[]
+  → User selects a single group folder (e.g. telegram-recorder/-2350891274)
+  → Iterate entries within the selected folder:
+      if directory named "media" → load media files
+      if file starts with "manifest-" and ends with ".json" → parse → sessions map
+      if file ends with ".json" → parse → messages array
+      if file ends with ".png" → index by stem (messageId) for screenshot lookup
+  → sessions: Map<sessionId, SessionManifest>
+  → messages: MessageRecord[]
   → Sort messages by timestamp DESC
   → Render table + session accordion
 ```
@@ -1005,7 +1003,6 @@ checked, this section imposes no restriction.
   │     │ Session ID   │ Group Name│ Messages │
   │ ☑   │ 1704067200000│ Group A   │ 24       │
   │ ☑   │ 1704070800000│ Group A   │ 31       │
-  │ ☐   │ 1704153600000│ Group B   │ 8        │
   └─────┴──────────────┴───────────┴──────────┘
 ```
 
