@@ -466,7 +466,8 @@ body {
   cursor: zoom-out;
 }
 
-.lightbox img {
+.lightbox img,
+.lightbox video {
   max-width: 95vw;
   max-height: 95vh;
   object-fit: contain;

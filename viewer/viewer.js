@@ -34,7 +34,10 @@ const els = {
   tableContainer: document.getElementById('table-container'),
   recordsBody: document.getElementById('records-body'),
   lightbox: document.getElementById('lightbox'),
-  lightboxImg: document.getElementById('lightbox-img')
+  lightboxImg: document.getElementById('lightbox-img'),
+  mediaLightbox: document.getElementById('media-lightbox'),
+  mediaLightboxImg: document.getElementById('media-lightbox-img'),
+  mediaLightboxVideo: document.getElementById('media-lightbox-video')
 };
 
 // State.
@@ -679,28 +682,7 @@ function extractBlobGuid(url) {
 
 async function openLocalMedia(guid, event) {
   event.preventDefault();
-  const handle = mediaHandles.get(guid);
-  if (!handle) return;
-  try {
-    // Prefer chrome.downloads.open() so the actual downloaded file is opened.
-    // Viewer is an extension page and has the downloads permission.
-    if (typeof chrome !== 'undefined' && chrome.downloads?.search) {
-      const items = await chrome.downloads.search({ query: [handle.name] });
-      const match = items.find(item => item.filename.endsWith(handle.name));
-      if (match?.id != null) {
-        await chrome.downloads.open(match.id);
-        return;
-      }
-    }
-
-    // Fallback: open an in-memory blob URL of the file.
-    const file = await handle.getFile();
-    const objectUrl = URL.createObjectURL(file);
-    mediaBlobUrls.set(objectUrl, true);
-    window.open(objectUrl, '_blank');
-  } catch (err) {
-    console.error('[TelegramRecorder] failed to open local media', guid, err);
-  }
+  await openMediaViewer(guid);
 }
 
 function createMediaCell(media) {
@@ -825,6 +807,52 @@ async function openLightbox(messageId) {
 function closeLightbox() {
   els.lightbox.classList.add('hidden');
   els.lightboxImg.src = '';
+}
+
+let currentMediaObjectUrl = '';
+
+async function openMediaViewer(guid) {
+  const handle = mediaHandles.get(guid);
+  if (!handle) return;
+  try {
+    const file = await handle.getFile();
+    const objectUrl = URL.createObjectURL(file);
+    currentMediaObjectUrl = objectUrl;
+
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+
+    if (isImage) {
+      els.mediaLightboxImg.src = objectUrl;
+      els.mediaLightboxImg.classList.remove('hidden');
+      els.mediaLightboxVideo.classList.add('hidden');
+    } else if (isVideo) {
+      els.mediaLightboxVideo.src = objectUrl;
+      els.mediaLightboxVideo.classList.remove('hidden');
+      els.mediaLightboxImg.classList.add('hidden');
+    } else {
+      // Unsupported preview type: open in a new tab as a fallback.
+      window.open(objectUrl, '_blank');
+      URL.revokeObjectURL(objectUrl);
+      currentMediaObjectUrl = '';
+      return;
+    }
+
+    els.mediaLightbox.classList.remove('hidden');
+  } catch (err) {
+    console.error('[TelegramRecorder] failed to open media viewer', guid, err);
+  }
+}
+
+function closeMediaViewer() {
+  els.mediaLightbox.classList.add('hidden');
+  els.mediaLightboxImg.src = '';
+  els.mediaLightboxVideo.pause();
+  els.mediaLightboxVideo.src = '';
+  if (currentMediaObjectUrl) {
+    URL.revokeObjectURL(currentMediaObjectUrl);
+    currentMediaObjectUrl = '';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1058,9 +1086,14 @@ document.querySelectorAll('#records-table th.sortable').forEach(th => {
 });
 
 els.lightbox.addEventListener('click', closeLightbox);
+els.mediaLightbox.addEventListener('click', closeMediaViewer);
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !els.lightbox.classList.contains('hidden')) {
+  if (e.key !== 'Escape') return;
+  if (!els.lightbox.classList.contains('hidden')) {
     closeLightbox();
+  }
+  if (!els.mediaLightbox.classList.contains('hidden')) {
+    closeMediaViewer();
   }
 });
 
