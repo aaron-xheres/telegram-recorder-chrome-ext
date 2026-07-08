@@ -242,6 +242,7 @@ async function extractMedia(bubble) {
   try {
     const media = [];
     const seen = new Set();
+    const mid = bubble.dataset.mid ?? 'unknown';
 
     // Wait for any lazy-loading media inside the bubble to settle.
     let imgs = Array.from(bubble.querySelectorAll('img'));
@@ -273,9 +274,9 @@ async function extractMedia(bubble) {
     videos = Array.from(bubble.querySelectorAll('video'));
 
     imgs.forEach(img => {
+      const src = img.currentSrc || img.src;
       if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return;
       if (img.closest(MEDIA_EXCLUDE_SELECTORS)) return;
-      const src = img.currentSrc || img.src;
       if (!src) return;
       if (seen.has(src)) return;
       // Skip transparent placeholder data URIs used for lazy loading.
@@ -287,19 +288,20 @@ async function extractMedia(bubble) {
       // If an image sits inside a .media-gif-wrapper it is a static poster/thumbnail
       // for a GIF that Telegram renders as a video. Skip it so the wait-for-media
       // path can capture the actual video blob, even if it has not been injected yet.
-      // Also skip any image whose wrapper already contains a blob video.
+      // Also skip any image whose wrapper already contains a <video> (blob or stream),
+      // because that image is just a poster frame for the real video.
       const mediaWrapper = img.closest('.media-container, .media-gif-wrapper, .attachment');
       if (mediaWrapper && (
         mediaWrapper.classList.contains('media-gif-wrapper') ||
-        mediaWrapper.querySelector('video[src^="blob:"]')
+        mediaWrapper.querySelector('video')
       )) return;
       seen.add(src);
       media.push(src);
     });
 
     videos.forEach(video => {
-      if (video.closest(MEDIA_EXCLUDE_SELECTORS)) return;
       const src = video.currentSrc || video.src;
+      if (video.closest(MEDIA_EXCLUDE_SELECTORS)) return;
       if (!src) return;
       if (seen.has(src)) return;
       const w = video.videoWidth || 0;
@@ -356,9 +358,9 @@ async function extractMedia(bubble) {
       media.push(url);
     });
 
-    // Only keep blob: URLs as media references. External/reference links
-    // (e.g. t.me, co.uk) belong in the links array, not media.
-    return media.filter(url => url.startsWith('blob:'));
+    // Keep blob: and Telegram stream: URLs as media references. External/reference
+    // links (e.g. t.me, co.uk) belong in the links array, not media.
+    return media.filter(url => url.startsWith('blob:') || url.startsWith('stream:'));
   } catch (err) {
     console.error('[TelegramRecorder] extractMedia failed', err);
     return [];
@@ -412,7 +414,6 @@ async function extract(bubble, sessionId) {
       screenshotFile: messageId ? `${messageId}.png` : null
     };
 
-    console.log('[TelegramRecorder] extracted', messageId, { posterName, posterId, contentLength: content?.length, media: media.length, links: links.length });
     return record;
   } catch (err) {
     console.error('[TelegramRecorder] extract failed for bubble', bubble.dataset.mid, err);

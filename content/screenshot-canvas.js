@@ -37,12 +37,6 @@ async function captureScreenshotCanvas(bubble) {
       return null;
     }
 
-    console.log('[TelegramRecorder] rendering bubble with html2canvas', {
-      width: rect.width,
-      height: rect.height,
-      dpr: window.devicePixelRatio || 1
-    });
-
     const canvas = await html2canvas(bubble, {
       useCORS: true,
       allowTaint: true,

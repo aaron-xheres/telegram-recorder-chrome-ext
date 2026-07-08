@@ -498,6 +498,16 @@ Telegram renders animated GIFs as silent videos inside a `.media-gif-wrapper`. T
 contains a static JPEG poster image (`<img class="media-photo">`). The poster must be skipped so
 that the actual video blob is captured; otherwise the JPEG thumbnail is saved instead of the GIF.
 
+Media detection checks both bubble-level classes (`photo`, `video`, `document`, etc.) and the
+presence of actual media wrappers/elements (`.media-gif-wrapper`, `.media-container`, `.attachment`,
+`.media-photo`, `.media-video`, `<audio>`). When media is detected, the bubble is given a short
+wait-and-re-extract pass so that lazy-loaded or late-injected elements (e.g. the `<video>` inside a
+GIF wrapper) are captured. Custom-emoji stickers are deliberately excluded from this detection.
+
+Video URLs may be either `blob:` (ephemeral same-origin blobs) or Telegram `stream:` URLs (internal
+streaming endpoints). Both are captured as references; downloads are attempted for both schemes, but
+`stream:` URLs may fail if Telegram's streaming endpoint rejects the request.
+
 ### 6.4 Complete Extraction Object
 
 ```js

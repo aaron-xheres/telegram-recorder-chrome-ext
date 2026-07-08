@@ -133,10 +133,8 @@
       if (el) {
         // Ensure we don't accidentally grab a small inner element.
         if (selector === '[class*="bubbles"]' && !el.querySelector('.bubble') && !el.classList.contains('bubbles')) {
-          console.log('[TelegramRecorder] skipping generic bubbles match', selector, el.className);
           continue;
         }
-        console.log('[TelegramRecorder] found bubbles container via', selector, el.className);
         return el;
       }
     }
@@ -264,23 +262,38 @@
   }
 
   /**
-   * Download a single media blob to the background service worker.
-   * Only blob: URLs are downloaded locally; remote URLs (e.g. t.me links)
-   * would be blocked by CORS and are left as references in the media array.
+   * Compute a short, stable identifier for a string. Used for stream: URLs whose
+   * full path is too long to be a filename.
+   * @param {string} str
+   * @returns {string}
+   */
+  function hashString(str) {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (h << 5) - h + str.charCodeAt(i);
+      h |= 0;
+    }
+    return Math.abs(h).toString(16);
+  }
+
+  /**
+   * Download a single media item to the background service worker.
+   * Supports blob: URLs (same-origin page blobs) and Telegram stream: URLs.
+   * Remote URLs (e.g. t.me links) are blocked by CORS and left as references.
    * @param {string} url
    * @param {string} groupId
    * @returns {Promise<string|null>} Relative path inside the group folder, e.g. "media/<guid>.ext".
    */
   async function downloadMediaItem(url, groupId) {
-    if (!url.startsWith('blob:')) {
-      console.log('[TelegramRecorder] skipping non-blob media URL', url);
+    if (!url.startsWith('blob:') && !url.startsWith('stream:')) {
       return null;
     }
 
-    const guid = url.split('/').pop() || 'unknown';
+    const guid = url.startsWith('stream:')
+      ? hashString(url)
+      : (url.split('/').pop() || 'unknown');
     if (downloadedMediaGuids.has(guid)) {
       const filename = downloadedMediaGuids.get(guid);
-      console.log('[TelegramRecorder] media already downloaded, skipping', guid);
       return `media/${filename}`;
     }
 
@@ -349,25 +362,43 @@
   // ---------------------------------------------------------------------------
 
   /**
-   * Wait for all <img>/<video> elements inside a bubble to finish loading.
-   * Uses a MutationObserver to catch late-injected media and resolves after a
-   * short quiet period once everything is complete.
+   * Wait for media-relevant <img>/<video> elements inside a bubble to finish
+   * loading. Uses a MutationObserver to catch late-injected media and late-set
+   * src attributes, resolving after a short quiet period once everything is
+   * complete.
+   * Avatars, emoji, and custom-emoji stickers are ignored so that a slow or
+   * broken avatar/emoji image cannot block the actual media attachment.
    * @param {Element} bubble
    * @param {number} timeoutMs
    * @returns {Promise<void>}
    */
   function waitForMediaReady(bubble, timeoutMs = 3000) {
     return new Promise(resolve => {
-      const deadline = Date.now() + timeoutMs;
       let quietTimer = null;
       let settled = false;
 
+      // Same exclusion list as extractor.js; defined there but mirrored here
+      // so this helper does not wait on avatar/emoji decorations.
+      const excludeSelectors = [
+        '.avatar',
+        '.bubbles-group-avatar',
+        '.bubble-name-forwarded-avatar',
+        'custom-emoji-element',
+        'custom-emoji-renderer-element',
+        '.emoji',
+        '.emoji-image'
+      ].join(', ');
+
       function isMediaComplete() {
-        const imgs = bubble.querySelectorAll('img');
-        const videos = bubble.querySelectorAll('video');
+        const imgs = Array.from(bubble.querySelectorAll('img')).filter(img =>
+          !img.closest(excludeSelectors)
+        );
+        const videos = Array.from(bubble.querySelectorAll('video')).filter(video =>
+          !video.closest(excludeSelectors)
+        );
 
         // Wait for images to have a src and finish loading.
-        const imagesReady = Array.from(imgs).every(img => {
+        const imagesReady = imgs.every(img => {
           const src = img.currentSrc || img.src;
           if (!src) return false;
           return img.complete;
@@ -375,7 +406,7 @@
 
         // Only wait for blob: videos to become ready. Stream URLs (e.g.
         // stream/...) may never fire metadata and are handled separately.
-        const videosReady = Array.from(videos).every(video => {
+        const videosReady = videos.every(video => {
           const src = video.currentSrc || video.src;
           if (!src) return true;
           if (!src.startsWith('blob:')) return true;
@@ -385,14 +416,22 @@
         return imagesReady && videosReady;
       }
 
-      function hasAddedMedia(mutations) {
-        return mutations.some(mutation =>
-          Array.from(mutation.addedNodes).some(node => {
-            if (node.nodeType !== Node.ELEMENT_NODE) return false;
-            const el = /** @type {Element} */ (node);
-            return el.matches?.('img, video') || el.querySelector?.('img, video') != null;
-          })
-        );
+      function mediaChanged(mutations) {
+        return mutations.some(mutation => {
+          if (mutation.type === 'childList') {
+            return Array.from(mutation.addedNodes).some(node => {
+              if (node.nodeType !== Node.ELEMENT_NODE) return false;
+              const el = /** @type {Element} */ (node);
+              if (el.closest?.(excludeSelectors)) return false;
+              return el.matches?.('img, video') || el.querySelector?.('img, video') != null;
+            });
+          }
+          if (mutation.type === 'attributes' && mutation.attributeName === 'src') {
+            const target = mutation.target;
+            return target.matches?.('img, video') && !target.closest?.(excludeSelectors);
+          }
+          return false;
+        });
       }
 
       function tryResolve() {
@@ -408,13 +447,18 @@
       }
 
       const observer = new MutationObserver(mutations => {
-        if (hasAddedMedia(mutations)) {
+        if (mediaChanged(mutations)) {
           clearTimeout(quietTimer);
           tryResolve();
         }
       });
 
-      observer.observe(bubble, { childList: true, subtree: true });
+      observer.observe(bubble, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['src']
+      });
       tryResolve();
 
       window.setTimeout(() => {
@@ -449,6 +493,20 @@
     const { bubble, messageData } = queue.shift();
 
     try {
+      // Re-extract media when the bubble reaches the front of the queue.
+      // Telegram lazy-loads photos; the actual <img class="media-photo">
+      // is only inserted/loaded once the bubble scrolls into view.
+      if (bubbleHasMedia(bubble)) {
+        bubble.scrollIntoView({ block: 'center', behavior: 'instant' });
+        // Wait for lazy media elements to appear and finish loading.
+        await waitForMediaReady(bubble, 3000);
+        const reMedia = await extractMedia(bubble);
+        if (reMedia.length > 0) {
+          messageData.media = reMedia;
+          messageData.mediaFiles = await downloadMessageMedia(reMedia, messageData.groupId);
+        }
+      }
+
       const croppedDataUrl = await captureScreenshot(bubble);
 
       if (!croppedDataUrl) {
@@ -512,9 +570,6 @@
           detected += processAddedNode(node);
         }
       }
-      if (detected > 0) {
-        console.log('[TelegramRecorder] mutation detected', detected, 'bubble(s)');
-      }
     } catch (err) {
       console.error('[TelegramRecorder] mutation handler error', err);
     }
@@ -535,9 +590,6 @@
         detected++;
       }
     });
-    if (detected > 0) {
-      console.log('[TelegramRecorder] scan caught', detected, 'missed bubble(s)');
-    }
   }
 
   /**
@@ -549,22 +601,40 @@
   }
 
   /**
+   * Determine whether a bubble likely contains standalone media attachments.
+   * Checks both bubble-level classes and actual media wrappers/elements.
+   * Custom-emoji stickers are excluded because they belong to the message text.
+   * @param {Element} bubble
+   * @returns {boolean}
+   */
+  function bubbleHasMedia(bubble) {
+    const mediaClasses = ['photo', 'video', 'document', 'audio', 'voice', 'sticker', 'gif'];
+    if (mediaClasses.some(cls => bubble.classList.contains(cls))) return true;
+
+    // Look for real media wrappers/elements. Avoid catching sticker videos
+    // inside custom-emoji elements — those are text decorations, not attachments.
+    const mediaSelectors = [
+      '.media-gif-wrapper',
+      '.media-container',
+      '.attachment',
+      '.media-photo',
+      '.media-video',
+      'audio'
+    ].join(', ');
+    const candidates = bubble.querySelectorAll(mediaSelectors);
+    return Array.from(candidates).some(el =>
+      !el.closest('custom-emoji-element, custom-emoji-renderer-element')
+    );
+  }
+
+  /**
    * @param {Element} bubble
    */
   async function processBubbleNode(bubble) {
     const mid = bubble.dataset.mid;
-    if (!mid) {
-      console.log('[TelegramRecorder] skipped bubble without data-mid (system/service message)');
-      return;
-    }
-    if (baselineSet.has(mid)) {
-      console.log('[TelegramRecorder] skipped baseline message', mid);
-      return;
-    }
-    if (recordedSet.has(mid)) {
-      console.log('[TelegramRecorder] skipped already-recorded message', mid);
-      return;
-    }
+    if (!mid) return;
+    if (baselineSet.has(mid)) return;
+    if (recordedSet.has(mid)) return;
 
     recordedSet.add(mid);
     let messageData = await extract(bubble, currentSessionId);
@@ -574,13 +644,10 @@
       messageData.groupId = currentGroupId;
     }
 
-    // If the bubble looks like it should have media but none was found, wait
-    // for the actual <img>/<video> elements to be injected and loaded before
-    // saving. This is driven by DOM/network readiness rather than a fixed timer.
-    const looksLikeMedia = ['photo', 'video', 'document', 'audio', 'voice', 'sticker', 'gif'].some(cls =>
-      bubble.classList.contains(cls)
-    );
-    if (looksLikeMedia && (messageData.media?.length ?? 0) === 0) {
+    // If the bubble contains media, wait for any lazy-loaded/injected elements
+    // (e.g. GIF videos inside .media-gif-wrapper) to settle and re-extract.
+    // This is driven by DOM/network readiness rather than a fixed timer.
+    if (bubbleHasMedia(bubble)) {
       await waitForMediaReady(bubble, 3000);
       const reMedia = await extractMedia(bubble);
       if (reMedia.length > 0) {
@@ -590,10 +657,6 @@
 
     messageData.mediaFiles = await downloadMessageMedia(messageData.media, currentGroupId);
 
-    console.log('[TelegramRecorder] queued new message', mid, messageData.posterName, {
-      media: messageData.media?.length,
-      mediaFiles: messageData.mediaFiles?.length
-    });
     enqueue(bubble, messageData);
   }
 
