@@ -184,34 +184,16 @@ async function saveFiles(messageData, croppedDataUrl) {
 }
 
 /**
- * Convert a Blob to a base64 data URL.
- * Service workers cannot use URL.createObjectURL, so data URLs are used instead.
- * @param {Blob} blob
- * @returns {Promise<string>}
- */
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
- * Download a media buffer into the group's media/ folder.
+ * Download a media data URL into the group's media/ folder.
  * @param {string} groupId
  * @param {string} filename
- * @param {ArrayBuffer} buffer
- * @param {string} mimeType
+ * @param {string} dataUrl
  */
-async function saveMediaBlob(groupId, filename, buffer, mimeType) {
-  if (!groupId || !filename || !buffer) {
-    throw new Error('Missing groupId, filename, or buffer');
+async function saveMediaBlob(groupId, filename, dataUrl) {
+  if (!groupId || !filename || !dataUrl) {
+    throw new Error('Missing groupId, filename, or dataUrl');
   }
 
-  const blob = new Blob([buffer], { type: mimeType || 'application/octet-stream' });
-  const dataUrl = await blobToDataUrl(blob);
   await chrome.downloads.download({
     url: dataUrl,
     filename: `telegram-recorder/${groupId}/media/${filename}`,
@@ -451,13 +433,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     case MSG.DOWNLOAD_MEDIA: {
-      const { groupId, filename, buffer, mimeType } = message;
-      if (!groupId || !filename || !buffer) {
-        sendResponse({ ok: false, error: 'Missing groupId, filename, or buffer' });
+      const { groupId, filename, dataUrl } = message;
+      if (!groupId || !filename || !dataUrl) {
+        sendResponse({ ok: false, error: 'Missing groupId, filename, or dataUrl' });
         break;
       }
       handleAsync(
-        saveMediaBlob(groupId, filename, buffer, mimeType)
+        saveMediaBlob(groupId, filename, dataUrl)
           .then(() => ({ ok: true }))
       );
       return true;

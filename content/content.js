@@ -248,6 +248,22 @@
   }
 
   /**
+   * Convert a Blob to a base64 data URL in the content script.
+   * Sending an ArrayBuffer through chrome.runtime.sendMessage can be serialized
+   * incorrectly; a string data URL survives reliably.
+   * @param {Blob} blob
+   * @returns {Promise<string>}
+   */
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /**
    * Download a single media blob to the background service worker.
    * Only blob: URLs are downloaded locally; remote URLs (e.g. t.me links)
    * would be blocked by CORS and are left as references in the media array.
@@ -281,13 +297,14 @@
         : detectMimeFromBuffer(buffer);
       const ext = extFromMime(mime);
       const filename = ext ? `${guid}.${ext}` : guid;
+      const dataUrl = await blobToDataUrl(blob);
 
       const dlResponse = await chrome.runtime.sendMessage({
         type: CONTENT_MSG.DOWNLOAD_MEDIA,
         groupId,
         filename,
         mimeType: mime || blob.type || 'application/octet-stream',
-        buffer
+        dataUrl
       });
 
       if (!dlResponse || !dlResponse.ok) {
