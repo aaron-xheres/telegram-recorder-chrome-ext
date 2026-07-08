@@ -31,6 +31,9 @@
   var navPollInterval = null;
   var lastLocationHref = location.href;
   var eventAbortController = new AbortController();
+  var downloadMediaEnabled = true;
+  /** @type {Map<string, string>} */
+  var downloadedMediaGuids = new Map();
 
   /** @type {MutationObserver|null} */
   var bubblesObserver = null;
@@ -156,6 +159,265 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Media download helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Map common MIME types to file extensions.
+   * @param {string} mime
+   * @returns {string}
+   */
+  function extFromMime(mime) {
+    const map = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+      'video/mp4': 'mp4',
+      'video/webm': 'webm',
+      'video/quicktime': 'mov',
+      'audio/mpeg': 'mp3',
+      'audio/ogg': 'ogg',
+      'application/pdf': 'pdf'
+    };
+    return map[mime?.toLowerCase()] ?? '';
+  }
+
+  /**
+   * Detect MIME type from file magic bytes when the browser/OS cannot.
+   * @param {ArrayBuffer} buffer
+   * @returns {string}
+   */
+  function detectMimeFromBuffer(buffer) {
+    if (!buffer || buffer.byteLength < 8) return '';
+    const bytes = new Uint8Array(buffer);
+    const hex = Array.from(bytes.slice(0, 8))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    if (hex.startsWith('ffd8ff')) return 'image/jpeg';
+    if (hex.startsWith('89504e47')) return 'image/png';
+    if (hex.startsWith('47494638')) return 'image/gif';
+    if (hex.startsWith('25504446')) return 'application/pdf';
+    if (hex.startsWith('000000') && bytes.length > 11) {
+      const ftyp = String.fromCharCode(...bytes.slice(4, 8));
+      if (ftyp === 'ftyp') return 'video/mp4';
+    }
+
+    // WebP: "RIFF" at 0, "WEBP" at 8
+    if (buffer.byteLength >= 12) {
+      const riff = String.fromCharCode(...bytes.slice(0, 4));
+      const webp = String.fromCharCode(...bytes.slice(8, 12));
+      if (riff === 'RIFF' && webp === 'WEBP') return 'image/webp';
+    }
+
+    return '';
+  }
+
+  const DOWNLOADED_MEDIA_KEY = 'downloadedMedia';
+
+  /**
+   * Load the set of already-downloaded media GUIDs from storage.
+   */
+  async function loadDownloadedMediaGuids() {
+    try {
+      const result = await chrome.storage.local.get(DOWNLOADED_MEDIA_KEY);
+      const map = result[DOWNLOADED_MEDIA_KEY] ?? {};
+      downloadedMediaGuids = new Map(Object.entries(map));
+    } catch (err) {
+      console.error('[TelegramRecorder] failed to load downloaded media guids', err);
+      downloadedMediaGuids = new Map();
+    }
+  }
+
+  /**
+   * Persist a newly downloaded GUID so it is not re-downloaded this session.
+   * @param {string} guid
+   * @param {string} filename
+   */
+  async function persistDownloadedMediaGuid(guid, filename) {
+    try {
+      const result = await chrome.storage.local.get(DOWNLOADED_MEDIA_KEY);
+      const map = result[DOWNLOADED_MEDIA_KEY] ?? {};
+      map[guid] = filename;
+      await chrome.storage.local.set({ [DOWNLOADED_MEDIA_KEY]: map });
+    } catch (err) {
+      console.error('[TelegramRecorder] failed to persist downloaded media guid', guid, err);
+    }
+  }
+
+  /**
+   * Convert a Blob to a base64 data URL in the content script.
+   * Sending an ArrayBuffer through chrome.runtime.sendMessage can be serialized
+   * incorrectly; a string data URL survives reliably.
+   * @param {Blob} blob
+   * @returns {Promise<string>}
+   */
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /**
+   * Download a single media blob to the background service worker.
+   * Only blob: URLs are downloaded locally; remote URLs (e.g. t.me links)
+   * would be blocked by CORS and are left as references in the media array.
+   * @param {string} url
+   * @param {string} groupId
+   * @returns {Promise<string|null>} Relative path inside the group folder, e.g. "media/<guid>.ext".
+   */
+  async function downloadMediaItem(url, groupId) {
+    if (!url.startsWith('blob:')) {
+      console.log('[TelegramRecorder] skipping non-blob media URL', url);
+      return null;
+    }
+
+    const guid = url.split('/').pop() || 'unknown';
+    if (downloadedMediaGuids.has(guid)) {
+      const filename = downloadedMediaGuids.get(guid);
+      console.log('[TelegramRecorder] media already downloaded, skipping', guid);
+      return `media/${filename}`;
+    }
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.warn('[TelegramRecorder] failed to fetch media', url, response.status);
+        return null;
+      }
+      const blob = await response.blob();
+      const buffer = await blob.arrayBuffer();
+      const mime = blob.type && blob.type !== 'application/octet-stream'
+        ? blob.type
+        : detectMimeFromBuffer(buffer);
+      const ext = extFromMime(mime);
+      const filename = ext ? `${guid}.${ext}` : guid;
+      const dataUrl = await blobToDataUrl(blob);
+
+      const dlResponse = await chrome.runtime.sendMessage({
+        type: CONTENT_MSG.DOWNLOAD_MEDIA,
+        groupId,
+        filename,
+        mimeType: mime || blob.type || 'application/octet-stream',
+        dataUrl
+      });
+
+      if (!dlResponse || !dlResponse.ok) {
+        console.warn('[TelegramRecorder] background media download failed', url, dlResponse);
+        return null;
+      }
+
+      downloadedMediaGuids.set(guid, filename);
+      persistDownloadedMediaGuid(guid, filename).catch(err => {
+        console.warn('[TelegramRecorder] failed to persist downloaded guid', guid, err);
+      });
+      return `media/${filename}`;
+    } catch (err) {
+      console.warn('[TelegramRecorder] downloadMediaItem failed', url, err);
+      return null;
+    }
+  }
+
+  /**
+   * Download all media attachments for a message when the setting is enabled.
+   * @param {string[]} media
+   * @param {string} groupId
+   * @returns {Promise<string[]>}
+   */
+  async function downloadMessageMedia(media, groupId) {
+    if (!downloadMediaEnabled || !media || media.length === 0) return [];
+    const results = await Promise.all(media.map(url => downloadMediaItem(url, groupId)));
+    return results.filter(Boolean);
+  }
+
+  /**
+   * Load the download-media preference from storage.
+   */
+  async function loadDownloadMediaSetting() {
+    try {
+      const result = await chrome.storage.local.get('downloadMedia');
+      downloadMediaEnabled = result.downloadMedia !== false;
+    } catch (err) {
+      console.error('[TelegramRecorder] failed to load download media setting', err);
+      downloadMediaEnabled = true;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Media readiness helper
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Wait for all <img>/<video> elements inside a bubble to finish loading.
+   * Uses a MutationObserver to catch late-injected media and resolves after a
+   * short quiet period once everything is complete.
+   * @param {Element} bubble
+   * @param {number} timeoutMs
+   * @returns {Promise<void>}
+   */
+  function waitForMediaReady(bubble, timeoutMs = 3000) {
+    return new Promise(resolve => {
+      const deadline = Date.now() + timeoutMs;
+      let quietTimer = null;
+      let settled = false;
+
+      function isMediaComplete() {
+        const imgs = bubble.querySelectorAll('img');
+        const videos = bubble.querySelectorAll('video');
+        return (
+          Array.from(imgs).every(img => img.complete) &&
+          Array.from(videos).every(video => video.readyState >= 1)
+        );
+      }
+
+      function hasAddedMedia(mutations) {
+        return mutations.some(mutation =>
+          Array.from(mutation.addedNodes).some(node => {
+            if (node.nodeType !== Node.ELEMENT_NODE) return false;
+            const el = /** @type {Element} */ (node);
+            return el.matches?.('img, video') || el.querySelector?.('img, video') != null;
+          })
+        );
+      }
+
+      function tryResolve() {
+        if (settled) return;
+        if (!isMediaComplete()) return;
+        clearTimeout(quietTimer);
+        quietTimer = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          observer.disconnect();
+          resolve();
+        }, 300);
+      }
+
+      const observer = new MutationObserver(mutations => {
+        if (hasAddedMedia(mutations)) {
+          clearTimeout(quietTimer);
+          tryResolve();
+        }
+      });
+
+      observer.observe(bubble, { childList: true, subtree: true });
+      tryResolve();
+
+      window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        observer.disconnect();
+        clearTimeout(quietTimer);
+        resolve();
+      }, timeoutMs);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Queue / screenshot pipeline
   // ---------------------------------------------------------------------------
 
@@ -269,9 +531,17 @@
   }
 
   /**
+   * @param {number} ms
+   * @returns {Promise<void>}
+   */
+  function sleep(ms) {
+    return new Promise(resolve => window.setTimeout(resolve, ms));
+  }
+
+  /**
    * @param {Element} bubble
    */
-  function processBubbleNode(bubble) {
+  async function processBubbleNode(bubble) {
     const mid = bubble.dataset.mid;
     if (!mid) {
       console.log('[TelegramRecorder] skipped bubble without data-mid (system/service message)');
@@ -287,13 +557,33 @@
     }
 
     recordedSet.add(mid);
-    const messageData = extract(bubble, currentSessionId);
+    let messageData = await extract(bubble, currentSessionId);
     // Ensure every record in this session uses the same group identifier
     // (numeric peer ID or sanitized @username) as the manifest/folder.
     if (!messageData.groupId || messageData.groupId !== currentGroupId) {
       messageData.groupId = currentGroupId;
     }
-    console.log('[TelegramRecorder] queued new message', mid, messageData.posterName);
+
+    // If the bubble looks like it should have media but none was found, wait
+    // for the actual <img>/<video> elements to be injected and loaded before
+    // saving. This is driven by DOM/network readiness rather than a fixed timer.
+    const looksLikeMedia = ['photo', 'video', 'document', 'audio', 'voice', 'sticker', 'gif'].some(cls =>
+      bubble.classList.contains(cls)
+    );
+    if (looksLikeMedia && (messageData.media?.length ?? 0) === 0) {
+      await waitForMediaReady(bubble, 3000);
+      const reMedia = await extractMedia(bubble);
+      if (reMedia.length > 0) {
+        messageData = { ...messageData, media: reMedia };
+      }
+    }
+
+    messageData.mediaFiles = await downloadMessageMedia(messageData.media, currentGroupId);
+
+    console.log('[TelegramRecorder] queued new message', mid, messageData.posterName, {
+      media: messageData.media?.length,
+      mediaFiles: messageData.mediaFiles?.length
+    });
     enqueue(bubble, messageData);
   }
 
@@ -459,6 +749,9 @@
   // ---------------------------------------------------------------------------
 
   (async function rehydrate() {
+    await loadDownloadMediaSetting();
+    await loadDownloadedMediaGuids();
+
     try {
       const response = await chrome.runtime.sendMessage({ type: CONTENT_MSG.GET_SESSION });
       const session = response?.session;
@@ -474,6 +767,12 @@
       console.error('[TelegramRecorder] session rehydration failed', err);
     }
   })();
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.downloadMedia) {
+      downloadMediaEnabled = changes.downloadMedia.newValue !== false;
+    }
+  });
 
   // ---------------------------------------------------------------------------
   // Cleanup registration for future reinjection

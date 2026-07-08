@@ -34,7 +34,10 @@ const els = {
   tableContainer: document.getElementById('table-container'),
   recordsBody: document.getElementById('records-body'),
   lightbox: document.getElementById('lightbox'),
-  lightboxImg: document.getElementById('lightbox-img')
+  lightboxImg: document.getElementById('lightbox-img'),
+  mediaLightbox: document.getElementById('media-lightbox'),
+  mediaLightboxImg: document.getElementById('media-lightbox-img'),
+  mediaLightboxVideo: document.getElementById('media-lightbox-video')
 };
 
 // State.
@@ -48,6 +51,10 @@ let messages = [];
 let screenshotHandles = new Map();
 /** @type {Map<string, string>} */
 let screenshotBlobUrls = new Map();
+/** @type {Map<string, FileSystemFileHandle>} */
+let mediaHandles = new Map();
+/** @type {Map<string, string>} */
+let mediaBlobUrls = new Map();
 /** @type {Set<string>} */
 let selectedSessionIds = new Set();
 /**
@@ -104,6 +111,8 @@ async function loadDirectory(root) {
   messages = [];
   screenshotHandles = new Map();
   screenshotBlobUrls = new Map();
+  mediaHandles = new Map();
+  mediaBlobUrls = new Map();
   selectedSessionIds = new Set();
 
   // Viewer expects a single group folder, not the telegram-recorder/ root.
@@ -129,6 +138,11 @@ async function loadDirectory(root) {
  */
 async function loadGroupDirectory(groupDir, groupId) {
   for await (const [name, entry] of groupDir.entries()) {
+    if (entry.kind === 'directory' && name === 'media') {
+      await loadMediaDirectory(entry);
+      continue;
+    }
+
     if (entry.kind !== 'file') continue;
 
     if (name.startsWith('manifest-') && name.endsWith('.json')) {
@@ -158,6 +172,23 @@ async function loadGroupDirectory(groupDir, groupId) {
     if (name.endsWith('.png')) {
       const stem = name.replace(/\.png$/i, '');
       screenshotHandles.set(stem, entry);
+    }
+  }
+}
+
+/**
+ * Load all files from the group's media/ folder.
+ * Files are keyed by their full name and by the GUID stem (name without
+ * extension) so they can be matched against blob URLs.
+ * @param {FileSystemDirectoryHandle} mediaDir
+ */
+async function loadMediaDirectory(mediaDir) {
+  for await (const [name, entry] of mediaDir.entries()) {
+    if (entry.kind !== 'file') continue;
+    mediaHandles.set(name, entry);
+    const stem = name.replace(/\.[^.]+$/, '');
+    if (stem && stem !== name) {
+      mediaHandles.set(stem, entry);
     }
   }
 }
@@ -588,7 +619,7 @@ function renderTable() {
     tr.appendChild(createPosterNameCell(record.posterName));
     tr.appendChild(createIdCell(record.posterId));
     tr.appendChild(createContentCell(record.content));
-    tr.appendChild(createImagesCell(record.images));
+    tr.appendChild(createMediaCell(record.media ?? record.images));
     tr.appendChild(createLinksCell(record.links));
     tr.appendChild(createScreenshotCell(record.messageId));
 
@@ -641,25 +672,51 @@ function createContentCell(content) {
   return td;
 }
 
-function createImagesCell(images) {
+function extractBlobGuid(url) {
+  try {
+    return new URL(url).pathname.split('/').pop() || '';
+  } catch {
+    return '';
+  }
+}
+
+async function openLocalMedia(guid, event) {
+  event.preventDefault();
+  await openMediaViewer(guid);
+}
+
+function createMediaCell(media) {
   const td = document.createElement('td');
-  td.className = 'images-cell';
-  if (!images || images.length === 0) {
+  td.className = 'media-cell';
+  if (!media || media.length === 0) {
     td.textContent = MISSING_FIELD;
     return td;
   }
   const count = document.createElement('div');
-  count.className = 'image-count';
-  count.textContent = `${images.length} image${images.length === 1 ? '' : 's'}`;
+  count.className = 'media-count';
+  count.textContent = `${media.length} media item${media.length === 1 ? '' : 's'}`;
   td.appendChild(count);
-  for (const url of images) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.textContent = url;
-    a.title = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    td.appendChild(a);
+    for (const url of media) {
+    const guid = extractBlobGuid(url);
+    const localHandle = guid ? mediaHandles.get(guid) : null;
+
+    if (localHandle) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'media-link-button';
+      btn.textContent = `${guid} (local)`;
+      btn.title = `Open downloaded media: ${guid}`;
+      btn.addEventListener('click', e => openLocalMedia(guid, e));
+      td.appendChild(btn);
+    } else {
+      const a = document.createElement('a');
+      a.href = url;
+      a.textContent = url;
+      a.title = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      td.appendChild(a);
+    }
   }
   return td;
 }
@@ -752,6 +809,106 @@ function closeLightbox() {
   els.lightboxImg.src = '';
 }
 
+let currentMediaObjectUrl = '';
+
+function mimeFromFilename(filename) {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const map = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+    mp3: 'audio/mpeg',
+    ogg: 'audio/ogg',
+    pdf: 'application/pdf'
+  };
+  return map[ext] || '';
+}
+
+function detectMimeFromBuffer(buffer) {
+  if (!buffer || buffer.byteLength < 8) return '';
+  const bytes = new Uint8Array(buffer);
+  const hex = Array.from(bytes.slice(0, 8))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  if (hex.startsWith('ffd8ff')) return 'image/jpeg';
+  if (hex.startsWith('89504e47')) return 'image/png';
+  if (hex.startsWith('47494638')) return 'image/gif';
+  if (hex.startsWith('25504446')) return 'application/pdf';
+  if (hex.startsWith('000000') && bytes.length > 11) {
+    const ftyp = String.fromCharCode(...bytes.slice(4, 8));
+    if (ftyp === 'ftyp') return 'video/mp4';
+  }
+
+  if (buffer.byteLength >= 12) {
+    const riff = String.fromCharCode(...bytes.slice(0, 4));
+    const webp = String.fromCharCode(...bytes.slice(8, 12));
+    if (riff === 'RIFF' && webp === 'WEBP') return 'image/webp';
+  }
+
+  return '';
+}
+
+async function openMediaViewer(guid) {
+  const handle = mediaHandles.get(guid);
+  if (!handle) return;
+  try {
+    const file = await handle.getFile();
+    const buffer = await file.arrayBuffer();
+    let mime = file.type || mimeFromFilename(handle.name) || detectMimeFromBuffer(buffer);
+    if (!mime) {
+      // Last resort: open externally without a preview.
+      const objectUrl = URL.createObjectURL(file);
+      window.open(objectUrl, '_blank');
+      URL.revokeObjectURL(objectUrl);
+      return;
+    }
+
+    const blob = new Blob([buffer], { type: mime });
+    const objectUrl = URL.createObjectURL(blob);
+    currentMediaObjectUrl = objectUrl;
+
+    const isImage = mime.startsWith('image/');
+    const isVideo = mime.startsWith('video/');
+
+    if (isImage) {
+      els.mediaLightboxImg.src = objectUrl;
+      els.mediaLightboxImg.classList.remove('hidden');
+      els.mediaLightboxVideo.classList.add('hidden');
+    } else if (isVideo) {
+      els.mediaLightboxVideo.src = objectUrl;
+      els.mediaLightboxVideo.classList.remove('hidden');
+      els.mediaLightboxImg.classList.add('hidden');
+    } else {
+      window.open(objectUrl, '_blank');
+      URL.revokeObjectURL(objectUrl);
+      currentMediaObjectUrl = '';
+      return;
+    }
+
+    els.mediaLightbox.classList.remove('hidden');
+  } catch (err) {
+    console.error('[TelegramRecorder] failed to open media viewer', guid, err);
+  }
+}
+
+function closeMediaViewer() {
+  els.mediaLightbox.classList.add('hidden');
+  els.mediaLightboxImg.src = '';
+  els.mediaLightboxVideo.pause();
+  els.mediaLightboxVideo.src = '';
+  if (currentMediaObjectUrl) {
+    URL.revokeObjectURL(currentMediaObjectUrl);
+    currentMediaObjectUrl = '';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // CSV export
 // ---------------------------------------------------------------------------
@@ -766,14 +923,14 @@ const CSV_HEADERS = [
   'poster_id',
   'content',
   'links',
-  'images',
+  'media',
   'screenshot_file',
   'screenshot_path'
 ];
 
 const CSV_COMMENTS = [
   '# Screenshots are local files. Resolve paths relative to your telegram-recorder/ folder.',
-  '# Blob URLs in \'images\' column are ephemeral and expire when the recording tab is closed.'
+  '# Blob URLs in \'media\' column are ephemeral and expire when the recording tab is closed.'
 ];
 
 /**
@@ -811,7 +968,7 @@ function buildCsvRows(visibleMessages) {
       record.posterId ?? '',
       record.content ?? '',
       (record.links ?? []).join('|'),
-      (record.images ?? []).join('|'),
+      ((record.media ?? record.images) ?? []).join('|'),
       screenshotFile,
       screenshotPath
     ];
@@ -983,14 +1140,22 @@ document.querySelectorAll('#records-table th.sortable').forEach(th => {
 });
 
 els.lightbox.addEventListener('click', closeLightbox);
+els.mediaLightbox.addEventListener('click', closeMediaViewer);
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !els.lightbox.classList.contains('hidden')) {
+  if (e.key !== 'Escape') return;
+  if (!els.lightbox.classList.contains('hidden')) {
     closeLightbox();
+  }
+  if (!els.mediaLightbox.classList.contains('hidden')) {
+    closeMediaViewer();
   }
 });
 
 window.addEventListener('beforeunload', () => {
   for (const url of screenshotBlobUrls.values()) {
+    URL.revokeObjectURL(url);
+  }
+  for (const url of mediaBlobUrls.keys()) {
     URL.revokeObjectURL(url);
   }
 });

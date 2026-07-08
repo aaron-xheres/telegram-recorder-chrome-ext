@@ -86,6 +86,22 @@ body {
   gap: 8px;
 }
 
+.settings {
+  font-size: 13px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.setting-row input[type="checkbox"] {
+  margin: 0;
+}
+
 .button {
   width: 100%;
   padding: 8px 12px;

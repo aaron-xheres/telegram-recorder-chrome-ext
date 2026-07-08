@@ -25,8 +25,11 @@
       "matches": ["https://web.telegram.org/k/*"],
       "js": [
         "shared/messages.js",
-        "content/extractor.js",
+        "lib/html2canvas.min.js",
+        "content/screenshot-canvas.js",
+        "content/screenshot-tab.js",
         "content/screenshot.js",
+        "content/extractor.js",
         "content/content.js"
       ],
       "run_at": "document_idle"

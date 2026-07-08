@@ -18,7 +18,9 @@ const els = {
   autoStopNotice: document.getElementById('auto-stop-notice'),
   startButton: document.getElementById('start-button'),
   stopButton: document.getElementById('stop-button'),
-  viewerButton: document.getElementById('viewer-button')
+  viewerButton: document.getElementById('viewer-button'),
+  canvasCapture: document.getElementById('canvas-capture'),
+  downloadMedia: document.getElementById('download-media')
 };
 
 // Current popup state.
@@ -73,7 +75,15 @@ async function sendToContent(message) {
   // Reinjection fallback (Phase 10.3).
   await chrome.scripting.executeScript({
     target: { tabId: activeTabId },
-    files: ['shared/messages.js', 'content/extractor.js', 'content/screenshot.js', 'content/content.js'],
+    files: [
+      'shared/messages.js',
+      'lib/html2canvas.min.js',
+      'content/screenshot-canvas.js',
+      'content/screenshot-tab.js',
+      'content/screenshot.js',
+      'content/extractor.js',
+      'content/content.js'
+    ],
     injectImmediately: true
   });
 
@@ -246,6 +256,22 @@ els.viewerButton.addEventListener('click', () => {
   window.close();
 });
 
+els.canvasCapture.addEventListener('change', async () => {
+  try {
+    await chrome.storage.local.set({ useCanvasCapture: els.canvasCapture.checked });
+  } catch (err) {
+    console.error('[TelegramRecorder] failed to save canvas capture setting', err);
+  }
+});
+
+els.downloadMedia.addEventListener('change', async () => {
+  try {
+    await chrome.storage.local.set({ downloadMedia: els.downloadMedia.checked });
+  } catch (err) {
+    console.error('[TelegramRecorder] failed to save download media setting', err);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
@@ -256,6 +282,17 @@ async function init() {
   activeTabUrl = tab?.url ?? '';
 
   await fetchActiveSessions();
+
+  try {
+    const storage = await chrome.storage.local.get(['useCanvasCapture', 'downloadMedia']);
+    els.canvasCapture.checked = storage.useCanvasCapture !== false;
+    els.downloadMedia.checked = storage.downloadMedia !== false;
+  } catch (err) {
+    console.error('[TelegramRecorder] failed to load settings', err);
+    els.canvasCapture.checked = true;
+    els.downloadMedia.checked = true;
+  }
+
   render();
 }
 

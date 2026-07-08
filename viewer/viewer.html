@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Telegram Recorder — Viewer</title>
+  <title>Telegram Recorder — Media Viewer</title>
   <link rel="stylesheet" href="viewer.css">
 </head>
 <body>
   <div id="app" class="viewer">
     <header class="viewer-header">
-      <h1>Telegram Recorder — Viewer</h1>
+      <h1>Telegram Recorder — Media Viewer</h1>
       <div class="toolbar">
         <button id="open-folder" class="button">Open Folder</button>
         <button id="export-csv" class="button" disabled>Export CSV</button>
@@ -115,7 +115,7 @@
               <th class="sortable" data-column="posterName">Poster Name <span class="sort-arrow"></span></th>
               <th class="sortable" data-column="posterId">Poster ID <span class="sort-arrow"></span></th>
               <th>Message Content</th>
-              <th>Images</th>
+              <th>Media</th>
               <th>Links</th>
               <th>Screenshot</th>
             </tr>
@@ -127,6 +127,11 @@
 
     <div id="lightbox" class="lightbox hidden">
       <img id="lightbox-img" src="" alt="Screenshot">
+    </div>
+
+    <div id="media-lightbox" class="lightbox hidden">
+      <img id="media-lightbox-img" class="hidden" alt="Media">
+      <video id="media-lightbox-video" class="hidden" controls></video>
     </div>
   </div>
 

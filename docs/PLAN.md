@@ -474,22 +474,25 @@ translatable.querySelectorAll('a.anchor-url, a.mention, a.anchor-hashtag').forEa
 })
 ```
 
-### 6.3 Media Images — Ephemeral Blob URLs
+### 6.3 Media URLs — Ephemeral Blob URLs
 
 ```
-images = []
-bubble.querySelectorAll('.attachment img.media-photo, .media-container img.media-photo')
-  .forEach(img => {
-    if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return
-    if (img.closest('custom-emoji-element, custom-emoji-renderer-element')) return
-    images.push(img.src)  // blob: URL
+media = []
+// Photos / videos / files / GIFs inside the bubble.
+// Includes <img src>, <video src>, background-image URLs, and attachment <a href>.
+bubble.querySelectorAll('img, video, .media-photo, .message-photo, .attachment, .thumbnail, .photo, a[download]')
+  .forEach(el => {
+    const url = el.currentSrc || el.src || el.href || backgroundImageUrl(el)
+    if (!url) return
+    if (isAvatarOrEmoji(el)) return
+    if (!media.includes(url)) media.push(url)  // blob: or file URL
   })
 ```
 
 Blob URLs are ephemeral (expire with the tab session). They are stored in the JSON record for
 reference but will be dead after the tab is closed. The screenshot captures media visually.
-Stickers and custom emoji images are excluded from `images[]` because they are part of the
-message text, not standalone media attachments.
+Stickers and custom emoji are excluded from `media[]` because they are part of the message text,
+not standalone media attachments.
 
 ### 6.4 Complete Extraction Object
 
@@ -501,7 +504,8 @@ message text, not standalone media attachments.
   posterName:  resolvePosterName(bubble),                  // string | null
   posterId:    resolvePosterPeerId(bubble),                 // string | null
   content:     extractText(bubble),                        // emoji-stripped, link text preserved
-  images:      extractMediaImages(bubble),                 // string[] — blob URLs
+  media:       extractMedia(bubble),                       // string[] — blob/file URLs
+  mediaFiles:  downloadMessageMedia(extractMedia(bubble)), // string[] — local "media/<guid>.ext" paths
   links:       extractLinks(bubble),                       // string[] — unique hrefs
   sessionId:   currentSessionId,                           // set by recording state
   screenshotFile: `${bubble.dataset.mid}.png`,
@@ -637,7 +641,7 @@ This ensures data accuracy even if the screenshot is delayed.
   "posterId": "8419206193",
   "content": "Yes, we are waiting for today's trading results. Hopefully it goes smoothly",
   "timestamp": "2026-07-02T10:17:38.000Z",
-  "images": [],
+  "media": [],
   "links": [],
   "screenshotFile": "4294984774.png"
 }
@@ -653,7 +657,7 @@ This ensures data accuracy even if the screenshot is delayed.
   "posterId": "-2350891274",
   "content": "We have disbursed investor profits!\nPlease check your bank account!!!",
   "timestamp": "2026-07-02T10:36:41.000Z",
-  "images": [
+  "media": [
     "blob:https://web.telegram.org/94e1baae-13ef-427f-ba9e-c1b3b535ec01"
   ],
   "links": [
@@ -672,7 +676,8 @@ This ensures data accuracy even if the screenshot is delayed.
 | `posterId` | `string \| null` | Sender peer ID; equals `groupId` for anonymous posts |
 | `content` | `string` | Plain text, emoji stripped, link text preserved, HTML entities decoded |
 | `timestamp` | `string` | ISO 8601 UTC, derived from `data-timestamp` |
-| `images` | `string[]` | Blob URLs of media images — ephemeral |
+| `media` | `string[]` | Blob/file URLs of media attachments (photos, videos, GIFs, files) — ephemeral |
+| `mediaFiles` | `string[]` | Local "media/<guid>.ext" paths saved by the extension |
 | `links` | `string[]` | Unique absolute URLs from anchor tags |
 | `screenshotFile` | `string` | Relative filename of PNG in same directory |
 
@@ -938,7 +943,7 @@ Stop clicked:
 | Poster Name | Yes + multi-term filter | `—` when `null`; supports `admin` keyword for anonymous posts |
 | Poster ID | Yes | `—` when `null`; otherwise a clickable link to `https://web.telegram.org/k/#<posterId>` |
 | Message Content | No | Full text shown in-cell; not collapsible |
-| Images | No | Count label + each blob URL rendered as clickable anchor; stacked vertically |
+| Media | No | Count label + each media URL rendered as clickable anchor; stacked vertically |
 | Links | No | Each `href` rendered as clickable anchor; stacked vertically |
 | Screenshot | No | Thumbnail max 80px height; click → lightbox overlay |
 
@@ -1033,14 +1038,14 @@ Export applies to currently **visible rows** (respects session filter + message 
 | `poster_id` | `record.posterId` | Empty string if null |
 | `content` | `record.content` | Quoted; internal newlines as `\n` |
 | `links` | `record.links.join('\|')` | Pipe-separated URLs |
-| `images` | `record.images.join('\|')` | Pipe-separated blob URLs (ephemeral) |
+| `media` | `record.media.join('\|')` | Pipe-separated blob/file URLs (ephemeral) |
 | `screenshot_file` | `record.screenshotFile` | Filename only (no path) |
 | `screenshot_path` | `{groupId}/{screenshotFile}` | Relative to telegram-recorder/ root |
 
 **Header note row** (first line after headers):
 ```
 # Screenshots are local files. Resolve paths relative to your telegram-recorder/ folder.
-# Blob URLs in 'images' column are ephemeral and expire when the recording tab is closed.
+# Blob URLs in 'media' column are ephemeral and expire when the recording tab is closed.
 ```
 
 **Generation:** client-side `Blob` + `URL.createObjectURL()` + programmatic `<a download="export.csv">` click. No server.
@@ -1145,8 +1150,8 @@ No file writes occur on collision. No error thrown. Silent skip.
 |---|---|---|
 | Telegram uses encrypted HTTPS (no packet access) | Cannot intercept messages at network level | DOM MutationObserver — sufficient for all data |
 | `captureVisibleTab` captures entire tab | Larger data per capture | Canvas crop to `getBoundingClientRect()` with DPR correction |
-| Blob image URLs expire with tab session | `images[]` URLs are dead after tab close | Screenshots capture media visually; filename in `screenshotFile`; blob URLs stored for in-session reference |
-| CSV image portability | No portable image path in CSV | `screenshot_path` column stores `{groupId}/{filename}` relative path; comment row explains resolution |
+| Blob media URLs expire with tab session | `media[]` URLs are dead after tab close | Screenshots capture media visually; filename in `screenshotFile`; blob URLs stored for in-session reference |
+| CSV media portability | No portable media path in CSV | `screenshot_path` column stores `{groupId}/{filename}` relative path; comment row explains resolution |
 | `hide-name` = anonymous sender | No name available | `posterName = null`; `posterId = groupId` (accurate — posted as group entity) |
 | Emoji rendered as `<img>` | Mixed with text content | Clone + remove `img.emoji` before `textContent` read |
 | Multiple messages arrive rapidly | Screenshot serialization lag | FIFO queue; data captured immediately at enqueue time, screenshot taken when slot free |
