@@ -29,10 +29,15 @@ const LINK_ANCHOR_SELECTORS = [
   'a.anchor-hashtag'
 ];
 
-const MEDIA_IMAGE_SELECTORS = [
-  '.attachment img.media-photo',
-  '.media-container img.media-photo'
-];
+const MEDIA_IMAGE_EXCLUDE_SELECTORS = [
+  '.avatar',
+  '.bubbles-group-avatar',
+  '.bubble-name-forwarded-avatar',
+  'custom-emoji-element',
+  'custom-emoji-renderer-element',
+  '.emoji',
+  '.emoji-image'
+].join(', ');
 
 const TIMESTAMP_SELECTORS = [
   '.time',
@@ -225,17 +230,26 @@ function extractLinks(bubble) {
 
 /**
  * Extract media image blob URLs from the bubble.
- * Stickers and custom emoji are excluded even if they use <img> tags.
+ * Uses a broad img query and excludes avatars, emoji, and custom-emoji
+ * elements. Telegram uses several different wrappers/ classes for photos,
+ * so a narrow selector set misses many images.
  * @param {Element} bubble
  * @returns {string[]}
  */
 function extractMediaImages(bubble) {
   try {
     const images = [];
-    bubble.querySelectorAll(MEDIA_IMAGE_SELECTORS.join(', ')).forEach(img => {
+    bubble.querySelectorAll('img').forEach(img => {
       if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return;
-      if (img.closest('custom-emoji-element, custom-emoji-renderer-element')) return;
-      if (img.src && !images.includes(img.src)) images.push(img.src);
+      if (img.closest(MEDIA_IMAGE_EXCLUDE_SELECTORS)) return;
+      const src = img.currentSrc || img.src;
+      if (!src) return;
+      if (images.includes(src)) return;
+      // Skip tiny icons/decorations.
+      const w = img.naturalWidth || img.width || 0;
+      const h = img.naturalHeight || img.height || 0;
+      if (w > 0 && h > 0 && (w < 32 || h < 32)) return;
+      images.push(src);
     });
     return images;
   } catch (err) {
