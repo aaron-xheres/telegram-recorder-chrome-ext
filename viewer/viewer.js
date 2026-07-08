@@ -682,6 +682,18 @@ async function openLocalMedia(guid, event) {
   const handle = mediaHandles.get(guid);
   if (!handle) return;
   try {
+    // Prefer chrome.downloads.open() so the actual downloaded file is opened.
+    // Viewer is an extension page and has the downloads permission.
+    if (typeof chrome !== 'undefined' && chrome.downloads?.search) {
+      const items = await chrome.downloads.search({ query: [handle.name] });
+      const match = items.find(item => item.filename.endsWith(handle.name));
+      if (match?.id != null) {
+        await chrome.downloads.open(match.id);
+        return;
+      }
+    }
+
+    // Fallback: open an in-memory blob URL of the file.
     const file = await handle.getFile();
     const objectUrl = URL.createObjectURL(file);
     mediaBlobUrls.set(objectUrl, true);
@@ -702,24 +714,27 @@ function createMediaCell(media) {
   count.className = 'media-count';
   count.textContent = `${media.length} media item${media.length === 1 ? '' : 's'}`;
   td.appendChild(count);
-  for (const url of media) {
+    for (const url of media) {
     const guid = extractBlobGuid(url);
     const localHandle = guid ? mediaHandles.get(guid) : null;
 
-    const a = document.createElement('a');
     if (localHandle) {
-      a.href = '#';
-      a.textContent = `${guid} (local)`;
-      a.title = `Open downloaded media: ${guid}`;
-      a.addEventListener('click', e => openLocalMedia(guid, e));
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'media-link-button';
+      btn.textContent = `${guid} (local)`;
+      btn.title = `Open downloaded media: ${guid}`;
+      btn.addEventListener('click', e => openLocalMedia(guid, e));
+      td.appendChild(btn);
     } else {
+      const a = document.createElement('a');
       a.href = url;
       a.textContent = url;
       a.title = url;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
+      td.appendChild(a);
     }
-    td.appendChild(a);
   }
   return td;
 }
