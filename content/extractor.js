@@ -242,6 +242,7 @@ async function extractMedia(bubble) {
   try {
     const media = [];
     const seen = new Set();
+    const mid = bubble.dataset.mid ?? 'unknown';
 
     // Wait for any lazy-loading media inside the bubble to settle.
     let imgs = Array.from(bubble.querySelectorAll('img'));
@@ -272,18 +273,42 @@ async function extractMedia(bubble) {
     imgs = Array.from(bubble.querySelectorAll('img'));
     videos = Array.from(bubble.querySelectorAll('video'));
 
+    console.log('[TelegramRecorder] extractMedia scanning', mid, {
+      imgCount: imgs.length,
+      videoCount: videos.length
+    });
+
     imgs.forEach(img => {
-      if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return;
-      if (img.closest(MEDIA_EXCLUDE_SELECTORS)) return;
       const src = img.currentSrc || img.src;
-      if (!src) return;
-      if (seen.has(src)) return;
+      const className = img.className;
+      if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) {
+        console.log('[TelegramRecorder] extractMedia skip img (emoji)', mid, className, src?.slice(0, 80));
+        return;
+      }
+      if (img.closest(MEDIA_EXCLUDE_SELECTORS)) {
+        console.log('[TelegramRecorder] extractMedia skip img (excluded ancestor)', mid, className, src?.slice(0, 80));
+        return;
+      }
+      if (!src) {
+        console.log('[TelegramRecorder] extractMedia skip img (no src)', mid, className);
+        return;
+      }
+      if (seen.has(src)) {
+        console.log('[TelegramRecorder] extractMedia skip img (duplicate)', mid, className, src?.slice(0, 80));
+        return;
+      }
       // Skip transparent placeholder data URIs used for lazy loading.
-      if (src.startsWith('data:image/gif;base64,')) return;
+      if (src.startsWith('data:image/gif;base64,')) {
+        console.log('[TelegramRecorder] extractMedia skip img (placeholder)', mid, className);
+        return;
+      }
       // Skip tiny media (<32px) to avoid icons/decorations.
       const w = img.naturalWidth || img.width || 0;
       const h = img.naturalHeight || img.height || 0;
-      if (w > 0 && h > 0 && (w < 32 || h < 32)) return;
+      if (w > 0 && h > 0 && (w < 32 || h < 32)) {
+        console.log('[TelegramRecorder] extractMedia skip img (tiny)', mid, className, { w, h }, src?.slice(0, 80));
+        return;
+      }
       // If an image sits inside a .media-gif-wrapper it is a static poster/thumbnail
       // for a GIF that Telegram renders as a video. Skip it so the wait-for-media
       // path can capture the actual video blob, even if it has not been injected yet.
@@ -293,19 +318,37 @@ async function extractMedia(bubble) {
       if (mediaWrapper && (
         mediaWrapper.classList.contains('media-gif-wrapper') ||
         mediaWrapper.querySelector('video')
-      )) return;
+      )) {
+        console.log('[TelegramRecorder] extractMedia skip img (poster)', mid, className, mediaWrapper.className, src?.slice(0, 80));
+        return;
+      }
+      console.log('[TelegramRecorder] extractMedia keep img', mid, className, { w, h }, src?.slice(0, 80));
       seen.add(src);
       media.push(src);
     });
 
     videos.forEach(video => {
-      if (video.closest(MEDIA_EXCLUDE_SELECTORS)) return;
       const src = video.currentSrc || video.src;
-      if (!src) return;
-      if (seen.has(src)) return;
+      const className = video.className;
+      if (video.closest(MEDIA_EXCLUDE_SELECTORS)) {
+        console.log('[TelegramRecorder] extractMedia skip video (excluded ancestor)', mid, className, src?.slice(0, 80));
+        return;
+      }
+      if (!src) {
+        console.log('[TelegramRecorder] extractMedia skip video (no src)', mid, className);
+        return;
+      }
+      if (seen.has(src)) {
+        console.log('[TelegramRecorder] extractMedia skip video (duplicate)', mid, className, src?.slice(0, 80));
+        return;
+      }
       const w = video.videoWidth || 0;
       const h = video.videoHeight || 0;
-      if (w > 0 && h > 0 && (w < 32 || h < 32)) return;
+      if (w > 0 && h > 0 && (w < 32 || h < 32)) {
+        console.log('[TelegramRecorder] extractMedia skip video (tiny)', mid, className, { w, h }, src?.slice(0, 80));
+        return;
+      }
+      console.log('[TelegramRecorder] extractMedia keep video', mid, className, { w, h }, src?.slice(0, 80));
       seen.add(src);
       media.push(src);
     });
@@ -334,6 +377,7 @@ async function extractMedia(bubble) {
       if (!match) return;
       const url = match[1];
       if (seen.has(url)) return;
+      console.log('[TelegramRecorder] extractMedia keep background-image', mid, el.className, url.slice(0, 80));
       seen.add(url);
       media.push(url);
     });
@@ -353,13 +397,20 @@ async function extractMedia(bubble) {
       const url = a.href;
       if (!url || seen.has(url)) return;
       if (!url.startsWith('blob:')) return;
+      console.log('[TelegramRecorder] extractMedia keep attachment link', mid, url.slice(0, 80));
       seen.add(url);
       media.push(url);
     });
 
     // Keep blob: and Telegram stream: URLs as media references. External/reference
     // links (e.g. t.me, co.uk) belong in the links array, not media.
-    return media.filter(url => url.startsWith('blob:') || url.startsWith('stream:'));
+    const filtered = media.filter(url => url.startsWith('blob:') || url.startsWith('stream:'));
+    console.log('[TelegramRecorder] extractMedia result', mid, {
+      raw: media.length,
+      filtered: filtered.length,
+      urls: filtered.map(u => u.slice(0, 80))
+    });
+    return filtered;
   } catch (err) {
     console.error('[TelegramRecorder] extractMedia failed', err);
     return [];
