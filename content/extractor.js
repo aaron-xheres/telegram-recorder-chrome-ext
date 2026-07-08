@@ -342,11 +342,14 @@ async function extractMedia(bubble) {
     bubble.querySelectorAll(attachmentSelectors).forEach(a => {
       const url = a.href;
       if (!url || seen.has(url)) return;
+      if (!url.startsWith('blob:')) return;
       seen.add(url);
       media.push(url);
     });
 
-    return media;
+    // Only keep blob: URLs as media references. External/reference links
+    // (e.g. t.me, co.uk) belong in the links array, not media.
+    return media.filter(url => url.startsWith('blob:'));
   } catch (err) {
     console.error('[TelegramRecorder] extractMedia failed', err);
     return [];

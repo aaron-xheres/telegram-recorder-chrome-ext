@@ -292,9 +292,9 @@
       }
       const blob = await response.blob();
       const buffer = await blob.arrayBuffer();
-      const mime = blob.type && blob.type !== 'application/octet-stream'
-        ? blob.type
-        : detectMimeFromBuffer(buffer);
+      // Always trust magic bytes over the blob's reported type. Telegram
+      // sometimes reports image/png for GIFs or leaves the type empty.
+      const mime = detectMimeFromBuffer(buffer) || blob.type || 'application/octet-stream';
       const ext = extFromMime(mime);
       const filename = ext ? `${guid}.${ext}` : guid;
       const dataUrl = await blobToDataUrl(blob);
