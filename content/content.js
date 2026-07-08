@@ -184,11 +184,18 @@
 
   /**
    * Download a single media blob to the background service worker.
+   * Only blob: URLs are downloaded locally; remote URLs (e.g. t.me links)
+   * would be blocked by CORS and are left as references in the media array.
    * @param {string} url
    * @param {string} groupId
    * @returns {Promise<string|null>} Relative path inside the group folder, e.g. "media/<guid>.ext".
    */
   async function downloadMediaItem(url, groupId) {
+    if (!url.startsWith('blob:')) {
+      console.log('[TelegramRecorder] skipping non-blob media URL', url);
+      return null;
+    }
+
     try {
       const response = await fetch(url);
       if (!response.ok) {
