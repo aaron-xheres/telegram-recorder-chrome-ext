@@ -10,7 +10,7 @@
  * @property {string|null} posterId
  * @property {string|null} content
  * @property {string} timestamp
- * @property {string[]} images
+ * @property {string[]} media
  * @property {string[]} links
  * @property {string|null} screenshotFile
  */
@@ -29,7 +29,7 @@ const LINK_ANCHOR_SELECTORS = [
   'a.anchor-hashtag'
 ];
 
-const MEDIA_IMAGE_EXCLUDE_SELECTORS = [
+const MEDIA_EXCLUDE_SELECTORS = [
   '.avatar',
   '.bubbles-group-avatar',
   '.bubble-name-forwarded-avatar',
@@ -229,22 +229,24 @@ function extractLinks(bubble) {
 }
 
 /**
- * Extract media image blob URLs from the bubble.
- * Waits for contained <img> elements to finish loading, then collects their
- * sources. Also picks up background-image URLs from Telegram's photo wrappers.
- * Avatars, emoji, and custom-emoji elements are excluded.
+ * Extract media URLs from the bubble.
+ * Waits for contained <img> and <video> elements to finish loading, then
+ * collects their sources. Also picks up background-image URLs and attachment
+ * links from Telegram's photo/video/file wrappers. Avatars, emoji, and
+ * custom-emoji elements are excluded.
  * @param {Element} bubble
  * @returns {Promise<string[]>}
  */
-async function extractMediaImages(bubble) {
+async function extractMedia(bubble) {
   try {
-    const images = [];
+    const media = [];
     const seen = new Set();
 
-    // Wait briefly for any lazy-loading images inside the bubble to settle.
+    // Wait briefly for any lazy-loading media inside the bubble to settle.
     const imgs = Array.from(bubble.querySelectorAll('img'));
-    await Promise.all(
-      imgs.map(img =>
+    const videos = Array.from(bubble.querySelectorAll('video'));
+    await Promise.all([
+      ...imgs.map(img =>
         img.complete
           ? Promise.resolve()
           : new Promise(resolve => {
@@ -253,23 +255,44 @@ async function extractMediaImages(bubble) {
               // Failsafe so extraction is never blocked for more than 500 ms.
               window.setTimeout(resolve, 500);
             })
+      ),
+      ...videos.map(video =>
+        video.readyState >= 1
+          ? Promise.resolve()
+          : new Promise(resolve => {
+              video.addEventListener('loadedmetadata', resolve, { once: true });
+              video.addEventListener('error', resolve, { once: true });
+              window.setTimeout(resolve, 500);
+            })
       )
-    );
+    ]);
 
     imgs.forEach(img => {
       if (img.classList.contains('emoji') || img.classList.contains('emoji-image')) return;
-      if (img.closest(MEDIA_IMAGE_EXCLUDE_SELECTORS)) return;
+      if (img.closest(MEDIA_EXCLUDE_SELECTORS)) return;
       const src = img.currentSrc || img.src;
       if (!src) return;
       if (seen.has(src)) return;
       // Skip transparent placeholder data URIs used for lazy loading.
       if (src.startsWith('data:image/gif;base64,')) return;
-      // Skip tiny images (<32px) to avoid icons/decorations.
+      // Skip tiny media (<32px) to avoid icons/decorations.
       const w = img.naturalWidth || img.width || 0;
       const h = img.naturalHeight || img.height || 0;
       if (w > 0 && h > 0 && (w < 32 || h < 32)) return;
       seen.add(src);
-      images.push(src);
+      media.push(src);
+    });
+
+    videos.forEach(video => {
+      if (video.closest(MEDIA_EXCLUDE_SELECTORS)) return;
+      const src = video.currentSrc || video.src;
+      if (!src) return;
+      if (seen.has(src)) return;
+      const w = video.videoWidth || 0;
+      const h = video.videoHeight || 0;
+      if (w > 0 && h > 0 && (w < 32 || h < 32)) return;
+      seen.add(src);
+      media.push(src);
     });
 
     // Telegram sometimes renders photos as divs with background-image.
@@ -289,12 +312,30 @@ async function extractMediaImages(bubble) {
       const url = match[1];
       if (seen.has(url)) return;
       seen.add(url);
-      images.push(url);
+      media.push(url);
     });
 
-    return images;
+    // Attachments (files, videos, audio, GIFs) are often linked via <a> tags
+    // inside wrappers or with a download attribute.
+    const attachmentSelectors = [
+      '.attachment a[href]',
+      '.document a[href]',
+      '.audio a[href]',
+      '.file a[href]',
+      '.video a[href]',
+      '.media-container a[download]',
+      'a[download]'
+    ].join(', ');
+    bubble.querySelectorAll(attachmentSelectors).forEach(a => {
+      const url = a.href;
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      media.push(url);
+    });
+
+    return media;
   } catch (err) {
-    console.error('[TelegramRecorder] extractMediaImages failed', err);
+    console.error('[TelegramRecorder] extractMedia failed', err);
     return [];
   }
 }
@@ -330,7 +371,7 @@ async function extract(bubble, sessionId) {
     }
 
     let content = extractText(bubble);
-    let images = await extractMediaImages(bubble);
+    let media = await extractMedia(bubble);
     let links = extractLinks(bubble);
 
     const record = {
@@ -341,12 +382,12 @@ async function extract(bubble, sessionId) {
       posterId,
       content,
       timestamp,
-      images,
+      media,
       links,
       screenshotFile: messageId ? `${messageId}.png` : null
     };
 
-    console.log('[TelegramRecorder] extracted', messageId, { posterName, posterId, contentLength: content?.length, images: images.length, links: links.length });
+    console.log('[TelegramRecorder] extracted', messageId, { posterName, posterId, contentLength: content?.length, media: media.length, links: links.length });
     return record;
   } catch (err) {
     console.error('[TelegramRecorder] extract failed for bubble', bubble.dataset.mid, err);
@@ -358,7 +399,7 @@ async function extract(bubble, sessionId) {
       posterId: null,
       content: null,
       timestamp: '',
-      images: [],
+      media: [],
       links: [],
       screenshotFile: null
     };
