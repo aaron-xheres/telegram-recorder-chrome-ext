@@ -26,8 +26,10 @@
       "js": [
         "shared/messages.js",
         "lib/html2canvas.min.js",
-        "content/extractor.js",
+        "content/screenshot-canvas.js",
+        "content/screenshot-tab.js",
         "content/screenshot.js",
+        "content/extractor.js",
         "content/content.js"
       ],
       "run_at": "document_idle"
