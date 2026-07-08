@@ -369,10 +369,24 @@
       function isMediaComplete() {
         const imgs = bubble.querySelectorAll('img');
         const videos = bubble.querySelectorAll('video');
-        return (
-          Array.from(imgs).every(img => img.complete) &&
-          Array.from(videos).every(video => video.readyState >= 1)
-        );
+
+        // Wait for images to have a src and finish loading.
+        const imagesReady = Array.from(imgs).every(img => {
+          const src = img.currentSrc || img.src;
+          if (!src) return false;
+          return img.complete;
+        });
+
+        // Only wait for blob: videos to become ready. Stream URLs (e.g.
+        // stream/...) may never fire metadata and are handled separately.
+        const videosReady = Array.from(videos).every(video => {
+          const src = video.currentSrc || video.src;
+          if (!src) return true;
+          if (!src.startsWith('blob:')) return true;
+          return video.readyState >= 1;
+        });
+
+        return imagesReady && videosReady;
       }
 
       function hasAddedMedia(mutations) {
