@@ -811,16 +811,46 @@ function closeLightbox() {
 
 let currentMediaObjectUrl = '';
 
+function mimeFromFilename(filename) {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const map = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+    mp3: 'audio/mpeg',
+    ogg: 'audio/ogg',
+    pdf: 'application/pdf'
+  };
+  return map[ext] || '';
+}
+
 async function openMediaViewer(guid) {
   const handle = mediaHandles.get(guid);
   if (!handle) return;
   try {
     const file = await handle.getFile();
-    const objectUrl = URL.createObjectURL(file);
+    let mime = file.type || mimeFromFilename(handle.name);
+    if (!mime) {
+      // Last resort: treat unknown files as octet-stream and open externally.
+      const objectUrl = URL.createObjectURL(file);
+      window.open(objectUrl, '_blank');
+      URL.revokeObjectURL(objectUrl);
+      return;
+    }
+
+    const buffer = await file.arrayBuffer();
+    const blob = new Blob([buffer], { type: mime });
+    const objectUrl = URL.createObjectURL(blob);
     currentMediaObjectUrl = objectUrl;
 
-    const isImage = file.type.startsWith('image/');
-    const isVideo = file.type.startsWith('video/');
+    const isImage = mime.startsWith('image/');
+    const isVideo = mime.startsWith('video/');
 
     if (isImage) {
       els.mediaLightboxImg.src = objectUrl;
@@ -831,7 +861,6 @@ async function openMediaViewer(guid) {
       els.mediaLightboxVideo.classList.remove('hidden');
       els.mediaLightboxImg.classList.add('hidden');
     } else {
-      // Unsupported preview type: open in a new tab as a fallback.
       window.open(objectUrl, '_blank');
       URL.revokeObjectURL(objectUrl);
       currentMediaObjectUrl = '';
