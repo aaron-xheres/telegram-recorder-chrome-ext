@@ -854,13 +854,13 @@ User clicks "Stop"
       baselineSet.clear()
       recordedSet.clear()
       stop navigation observer
-      if queue has items and processor is idle:
-        processNext()  ← drain already-detected messages
+      queue = []       ← dump all queued messages
+      isProcessing = false
 ```
 
 Note: any message currently mid-capture when Stop is clicked will complete and be saved.
-Messages already detected and queued before Stop will also be processed (JSON saved even if
-screenshot fails). No messages detected after Stop are enqueued.
+Messages already detected and queued before Stop are dumped and will not be processed.
+No messages detected after Stop are enqueued.
 
 ### 11.4 Chat Navigation While Recording
 
@@ -872,7 +872,7 @@ content.js detects chat navigation by observing the unique `.sidebar-header.topb
   if (recording && newGroupId && newGroupId !== currentGroupId):
     → send AUTO_STOPPED to background
     → background: removes tab session from activeSessions and persists
-    → content.js: stop observers, drain already-queued messages if processor idle
+    → content.js: stop observers, dump queued messages
     → popup (if open): re-renders to "Stopped" state with note "Chat changed"
 ```
 

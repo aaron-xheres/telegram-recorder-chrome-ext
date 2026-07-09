@@ -750,12 +750,10 @@
     recordedSet.clear();
     stopTopbarObserver();
 
-    // Do not clear the queue — messages already detected before stop should still
-    // be processed. Do not reset isProcessing either; if the queue processor is
-    // idle, start it so queued messages drain.
-    if (queue.length > 0 && !isProcessing) {
-      processNext();
-    }
+    // Dump queued messages. The in-flight item may still complete, but nothing
+    // newly detected after stop should be processed.
+    queue = [];
+    isProcessing = false;
 
     console.log('[TelegramRecorder] stopped recording');
   }
