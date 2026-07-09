@@ -853,12 +853,16 @@
       }
       if (!topbarChanged) return;
 
-      // The observed topbar was replaced or removed; stop observing it and
-      // re-attach to the new topbar if one exists.
+      // The observed topbar was replaced or removed; stop observing it,
+      // notify navigation immediately, then re-attach to the new topbar.
       stale = true;
       observers.forEach(o => o.disconnect());
+      const newGroupId = getTopbarGroupId();
+      if (newGroupId !== lastTopbarGroupId) {
+        lastTopbarGroupId = newGroupId ?? '';
+        onNavigation();
+      }
       startTopbarObserver();
-      notifyIfChanged();
     });
     parentObserver.observe(parent, { childList: true });
     observers.push(parentObserver);
