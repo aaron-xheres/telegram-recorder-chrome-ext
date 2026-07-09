@@ -802,11 +802,14 @@
    */
   function startTopbarObserver() {
     stopTopbarObserver();
+    if (!isRecording) return;
     lastTopbarGroupId = getTopbarGroupId() ?? '';
 
     const topbar = document.querySelector(TOPBAR_SELECTOR);
     if (!topbar) {
-      // No chat open yet; watch the scoped chat container for a topbar to appear.
+      // Defensive fallback: a recording should always have a topbar because
+      // it requires a chat to be open, but if the element is temporarily absent
+      // (e.g. mid-transition), watch the scoped chat container briefly.
       const container = getTopbarContainer();
       const observer = new MutationObserver(() => {
         const newTopbar = document.querySelector(TOPBAR_SELECTOR);
@@ -818,7 +821,7 @@
       });
       observer.observe(container, { childList: true, subtree: true });
 
-      // Safety net: stop observing after a few seconds if no chat is opened.
+      // Clean up the defensive fallback if the topbar never appears.
       const timeout = window.setTimeout(() => {
         observer.disconnect();
         if (topbarObserver === observer) topbarObserver = null;
@@ -879,7 +882,7 @@
       if (!topbarChanged) return;
 
       // The observed topbar was replaced or removed; stop observing it,
-      // notify navigation immediately, then re-attach to the new topbar.
+      // notify navigation immediately, then re-attach only if still recording.
       stale = true;
       observers.forEach(o => o.disconnect());
       const newGroupId = getTopbarGroupId();
@@ -887,7 +890,7 @@
         lastTopbarGroupId = newGroupId ?? '';
         onNavigation();
       }
-      startTopbarObserver();
+      if (isRecording) startTopbarObserver();
     });
     parentObserver.observe(parent, { childList: true });
     observers.push(parentObserver);
