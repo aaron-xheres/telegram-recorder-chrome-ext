@@ -163,8 +163,6 @@ function render() {
   setVisible(els.groupSection, true);
   setVisible(els.statusSection, true);
 
-  const groupInfo = fetchGroupInfo(); // async; will re-render on response
-
   const isRecording = Boolean(currentSession);
   els.statusValue.classList.toggle('status-recording', isRecording);
   els.statusText.textContent = isRecording ? 'Recording' : 'Stopped';
@@ -184,30 +182,44 @@ function render() {
     setVisible(els.startButton, true);
   }
 
-  // Update group info asynchronously.
-  groupInfo.then(async info => {
-    if (currentRender !== renderGeneration) return;
+  // Update group info asynchronously so the popup renders immediately.
+  applyGroupInfo(currentRender);
+}
 
-    const hasGroup = Boolean(info.groupId);
-    if (!isRecording) {
-      els.groupName.textContent = hasGroup
-        ? (info.groupName ?? 'Unknown')
-        : 'No group open';
-      els.groupId.textContent = info.groupId ?? '—';
+/**
+ * Fetch group info and update the popup UI, discarding stale results.
+ * @param {number} currentRender
+ */
+async function applyGroupInfo(currentRender) {
+  let info;
+  try {
+    info = await fetchGroupInfo();
+  } catch (err) {
+    console.error('[TelegramRecorder] failed to fetch group info for render', err);
+    return;
+  }
+  if (currentRender !== renderGeneration) return;
+
+  const isRecording = Boolean(currentSession);
+  const hasGroup = Boolean(info.groupId);
+  if (!isRecording) {
+    els.groupName.textContent = hasGroup
+      ? (info.groupName ?? 'Unknown')
+      : 'No group open';
+    els.groupId.textContent = info.groupId ?? '—';
+  }
+
+  if (!isRecording) {
+    setVisible(els.startButton, true);
+    els.startButton.disabled = !hasGroup;
+    els.startButton.title = hasGroup ? '' : 'Open a Telegram group chat first';
+
+    // If this group is already being recorded in another tab, block starting again.
+    if (hasGroup && activeSessions.some(s => s.groupId === info.groupId)) {
+      els.startButton.disabled = true;
+      els.startButton.title = 'This group is already being recorded in another tab';
     }
-
-    if (!isRecording) {
-      setVisible(els.startButton, true);
-      els.startButton.disabled = !hasGroup;
-      els.startButton.title = hasGroup ? '' : 'Open a Telegram group chat first';
-
-      // If this group is already being recorded in another tab, block starting again.
-      if (hasGroup && activeSessions.some(s => s.groupId === info.groupId)) {
-        els.startButton.disabled = true;
-        els.startButton.title = 'This group is already being recorded in another tab';
-      }
-    }
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -313,6 +325,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     fetchActiveSessions().then(() => {
       setVisible(els.autoStopNotice, true);
       render();
+    }).catch(err => {
+      console.error('[TelegramRecorder] failed to render after auto-stop', err);
     });
     sendResponse({ ok: true });
     return false;
