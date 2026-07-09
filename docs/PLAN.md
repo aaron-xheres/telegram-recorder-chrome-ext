@@ -864,7 +864,10 @@ Messages still in queue are discarded.
 ### 11.4 Chat Navigation While Recording
 
 ```
-content.js detects URL change via a 500 ms `location.href` poll plus popstate / hashchange listeners:
+content.js detects chat navigation by observing the unique `.sidebar-header.topbar` element:
+  - top bar is replaced when the user switches chats → parent MutationObserver fires
+  - top bar attributes/subtree mutations (e.g. `data-peer-id` change) also trigger check
+  - popstate / hashchange listeners kept as lightweight backup
   if (recording && newChatId !== currentGroupId):
     → send AUTO_STOPPED to background
     → background: removes tab session from activeSessions and persists
@@ -978,9 +981,10 @@ Below the status row the popup shows two toggles persisted in `chrome.storage.lo
 `popup.js` sends `GET_GROUP_INFO` to the content script via `chrome.tabs.sendMessage`.
 
 Content script responds with `{ groupId, groupName }` extracted from:
-- `groupId`: URL hash fragment (preferred), with fallback to `.bubbles[data-peer-id]`
-- `groupName`: first match among `.chat-info .peer-title`, `.chat-info-title`, `.topbar .peer-title`,
-  or `<title>` text content
+- `groupId`: `.sidebar-header.topbar` `data-peer-id` (preferred), with fallback to URL hash fragment
+  and `.bubbles[data-peer-id]`
+- `groupName`: first match among `.sidebar-header.topbar .chat-info .peer-title`,
+  `.chat-info .peer-title`, `.chat-info-title`, `.topbar .peer-title`, or `<title>` text content
 
 If no chat identifier can be resolved → content script responds `{ groupId: null, groupName: null }`.
 
@@ -1285,7 +1289,7 @@ No file writes occur on collision. No error thrown. Silent skip.
 | Emoji rendered as `<img>` | Mixed with text content | Clone + remove `img.emoji` before `textContent` read |
 | Multiple messages arrive rapidly | Screenshot serialization lag | FIFO queue; data captured immediately at enqueue time, screenshot taken when slot free |
 | MV3 service worker may terminate | In-flight state lost | `recordedSet` lives in each content script's memory; content scripts re-request their session via `GET_SESSION` after the service worker wakes |
-| Chat navigation while recording | Observer on wrong DOM | Auto-stop on URL change; user must restart on new chat |
+| Chat navigation while recording | Observer on wrong DOM | Auto-stop when `.sidebar-header.topbar` changes; `popstate`/`hashchange` kept as backup; user must restart on new chat |
 | Edited messages reuse `data-mid` | Re-record would overwrite | Treated as collision — original preserved, edit not re-recorded |
 | Service messages have `data-mid` | Would be recorded as normal messages | Skipped by `bubble.classList.contains('service')` |
 | Photos lazy-load on scroll | Media missing if extracted before bubble is visible | Final media extraction happens when the bubble is scrolled into view for its screenshot |
@@ -1313,7 +1317,7 @@ No file writes occur on collision. No error thrown. Silent skip.
 | 2 | `data-mid` uniqueness across sessions | Confirm IDs don't repeat across different recording sessions for same group |
 | 3 | `subtree: true` observer performance | Verify no performance degradation in high-volume chats |
 | 4 | Scroll + capture timing | Validate 150ms wait is sufficient; test on slow connections and media-heavy messages |
-| 5 | Chat navigation detection | Use a `location.href` poll (500 ms) plus `hashchange`/`popstate` listeners because SPA navigation does not always fire the events reliably |
+| 5 | Chat navigation detection | **Resolved** — observe `.sidebar-header.topbar` (unique element, replaced on chat switch); keep `hashchange`/`popstate` as backup |
 
 ---
 
