@@ -3,46 +3,46 @@
 
 // DOM references.
 const els = {
-  openFolder: document.getElementById('open-folder'),
-  exportCsv: document.getElementById('export-csv'),
-  posterNameInput: document.getElementById('poster-name-input'),
-  addPosterName: document.getElementById('add-poster-name'),
-  posterNameFilters: document.getElementById('poster-name-filters'),
-  posterNameMatchCase: document.getElementById('poster-name-match-case'),
-  posterNameMatchWord: document.getElementById('poster-name-match-word'),
-  posterIdInput: document.getElementById('poster-id-input'),
-  addPosterId: document.getElementById('add-poster-id'),
-  posterIdFilters: document.getElementById('poster-id-filters'),
-  contentInput: document.getElementById('content-input'),
-  addContent: document.getElementById('add-content'),
-  contentFilters: document.getElementById('content-filters'),
-  contentMatchCase: document.getElementById('content-match-case'),
-  contentMatchWord: document.getElementById('content-match-word'),
-  requireScreenshot: document.getElementById('require-screenshot'),
-  requireLink: document.getElementById('require-link'),
-  groupInfo: document.getElementById('group-info'),
-  groupList: document.getElementById('group-list'),
-  sessionsSection: document.getElementById('sessions-section'),
-  sessionsToggle: document.getElementById('sessions-toggle'),
-  sessionsPanel: document.getElementById('sessions-panel'),
-  sessionsTable: document.getElementById('sessions-table'),
-  sessionsTableBody: document.getElementById('sessions-table-body'),
-  selectAllSessions: document.getElementById('select-all-sessions'),
-  deselectAllSessions: document.getElementById('deselect-all-sessions'),
-  filtersSection: document.getElementById('filters-section'),
-  emptyState: document.getElementById('empty-state'),
-  tableContainer: document.getElementById('table-container'),
-  recordsBody: document.getElementById('records-body'),
-  lightbox: document.getElementById('lightbox'),
-  lightboxImg: document.getElementById('lightbox-img'),
-  mediaLightbox: document.getElementById('media-lightbox'),
-  mediaLightboxImg: document.getElementById('media-lightbox-img'),
-  mediaLightboxVideo: document.getElementById('media-lightbox-video')
+  openFolder: document.getElementById("open-folder"),
+  exportCsv: document.getElementById("export-csv"),
+  posterNameInput: document.getElementById("poster-name-input"),
+  addPosterName: document.getElementById("add-poster-name"),
+  posterNameFilters: document.getElementById("poster-name-filters"),
+  posterNameMatchCase: document.getElementById("poster-name-match-case"),
+  posterNameMatchWord: document.getElementById("poster-name-match-word"),
+  posterIdInput: document.getElementById("poster-id-input"),
+  addPosterId: document.getElementById("add-poster-id"),
+  posterIdFilters: document.getElementById("poster-id-filters"),
+  contentInput: document.getElementById("content-input"),
+  addContent: document.getElementById("add-content"),
+  contentFilters: document.getElementById("content-filters"),
+  contentMatchCase: document.getElementById("content-match-case"),
+  contentMatchWord: document.getElementById("content-match-word"),
+  requireScreenshot: document.getElementById("require-screenshot"),
+  requireLink: document.getElementById("require-link"),
+  groupInfo: document.getElementById("group-info"),
+  groupList: document.getElementById("group-list"),
+  sessionsSection: document.getElementById("sessions-section"),
+  sessionsToggle: document.getElementById("sessions-toggle"),
+  sessionsPanel: document.getElementById("sessions-panel"),
+  sessionsTable: document.getElementById("sessions-table"),
+  sessionsTableBody: document.getElementById("sessions-table-body"),
+  selectAllSessions: document.getElementById("select-all-sessions"),
+  deselectAllSessions: document.getElementById("deselect-all-sessions"),
+  filtersSection: document.getElementById("filters-section"),
+  emptyState: document.getElementById("empty-state"),
+  tableContainer: document.getElementById("table-container"),
+  recordsBody: document.getElementById("records-body"),
+  lightbox: document.getElementById("lightbox"),
+  lightboxImg: document.getElementById("lightbox-img"),
+  mediaLightbox: document.getElementById("media-lightbox"),
+  mediaLightboxImg: document.getElementById("media-lightbox-img"),
+  mediaLightboxVideo: document.getElementById("media-lightbox-video"),
 };
 
 // State.
 let directoryHandle = null;
-let currentGroupId = '';
+let currentGroupId = "";
 /** @type {Map<string, object>} */
 let sessions = new Map();
 /** @type {object[]} */
@@ -80,9 +80,9 @@ let contentMatchWord = false;
 let requireScreenshot = true;
 let requireLink = false;
 /** @type {{ column: string|null, direction: 'asc'|'desc'|null }} */
-let sortState = { column: 'timestamp', direction: 'desc' };
+let sortState = { column: "timestamp", direction: "desc" };
 
-const MISSING_FIELD = '—';
+const MISSING_FIELD = "—";
 
 // ---------------------------------------------------------------------------
 // Folder loading
@@ -90,13 +90,13 @@ const MISSING_FIELD = '—';
 
 async function openFolder() {
   try {
-    const handle = await window.showDirectoryPicker({ mode: 'read' });
+    const handle = await window.showDirectoryPicker({ mode: "read" });
     directoryHandle = handle;
     await loadDirectory(handle);
   } catch (err) {
-    if (err.name === 'AbortError') return;
-    console.error('[TelegramRecorder] openFolder failed', err);
-    alert('Failed to open folder: ' + (err.message ?? String(err)));
+    if (err.name === "AbortError") return;
+    console.error("[TelegramRecorder] openFolder failed", err);
+    alert("Failed to open folder: " + (err.message ?? String(err)));
   }
 }
 
@@ -124,8 +124,8 @@ async function loadDirectory(root) {
   renderFilters();
   renderTable();
 
-  els.emptyState.classList.add('hidden');
-  els.tableContainer.classList.remove('hidden');
+  els.emptyState.classList.add("hidden");
+  els.tableContainer.classList.remove("hidden");
   els.exportCsv.disabled = messages.length === 0;
 }
 
@@ -135,39 +135,43 @@ async function loadDirectory(root) {
  */
 async function loadGroupDirectory(groupDir, groupId) {
   for await (const [name, entry] of groupDir.entries()) {
-    if (entry.kind === 'directory' && name === 'media') {
+    if (entry.kind === "directory" && name === "media") {
       await loadMediaDirectory(entry);
       continue;
     }
 
-    if (entry.kind !== 'file') continue;
+    if (entry.kind !== "file") continue;
 
-    if (name.startsWith('manifest-') && name.endsWith('.json')) {
+    if (name.startsWith("manifest-") && name.endsWith(".json")) {
       try {
         const file = await entry.getFile();
         const text = await file.text();
         const manifest = JSON.parse(text);
         if (manifest.id) sessions.set(manifest.id, manifest);
       } catch (err) {
-        console.error('[TelegramRecorder] failed to parse manifest', name, err);
+        console.error("[TelegramRecorder] failed to parse manifest", name, err);
       }
       continue;
     }
 
-    if (name.endsWith('.json')) {
+    if (name.endsWith(".json")) {
       try {
         const file = await entry.getFile();
         const text = await file.text();
         const record = JSON.parse(text);
         if (record.messageId) messages.push(record);
       } catch (err) {
-        console.error('[TelegramRecorder] failed to parse message record', name, err);
+        console.error(
+          "[TelegramRecorder] failed to parse message record",
+          name,
+          err,
+        );
       }
       continue;
     }
 
-    if (name.endsWith('.png')) {
-      const stem = name.replace(/\.png$/i, '');
+    if (name.endsWith(".png")) {
+      const stem = name.replace(/\.png$/i, "");
       screenshotHandles.set(stem, entry);
     }
   }
@@ -181,9 +185,9 @@ async function loadGroupDirectory(groupDir, groupId) {
  */
 async function loadMediaDirectory(mediaDir) {
   for await (const [name, entry] of mediaDir.entries()) {
-    if (entry.kind !== 'file') continue;
+    if (entry.kind !== "file") continue;
     mediaHandles.set(name, entry);
-    const stem = name.replace(/\.[^.]+$/, '');
+    const stem = name.replace(/\.[^.]+$/, "");
     if (stem && stem !== name) {
       mediaHandles.set(stem, entry);
     }
@@ -217,7 +221,7 @@ function getGroupName(sessionId) {
  * @returns {boolean}
  */
 function isAdminFilterKeyword(name) {
-  return name === 'admin' || name === '—' || name === '-';
+  return name === "admin" || name === "—" || name === "-";
 }
 
 /**
@@ -235,8 +239,8 @@ function matchesTerm(text, filter) {
   }
 
   if (filter.matchWord) {
-    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const flags = filter.matchCase ? '' : 'i';
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const flags = filter.matchCase ? "" : "i";
     const regex = new RegExp(`\\b${escaped}\\b`, flags);
     return regex.test(haystack);
   }
@@ -254,7 +258,7 @@ function matchesPosterNameFilter(record, filter) {
   if (isAdminFilterKeyword(normalizedTerm)) {
     return record.posterName == null && record.posterId === record.groupId;
   }
-  return matchesTerm(record.posterName ?? '', filter);
+  return matchesTerm(record.posterName ?? "", filter);
 }
 
 /**
@@ -263,7 +267,9 @@ function matchesPosterNameFilter(record, filter) {
  */
 function matchesPosterNameFilters(record) {
   if (posterNameFilters.length === 0) return true;
-  return posterNameFilters.some(filter => matchesPosterNameFilter(record, filter));
+  return posterNameFilters.some((filter) =>
+    matchesPosterNameFilter(record, filter),
+  );
 }
 
 /**
@@ -272,7 +278,7 @@ function matchesPosterNameFilters(record) {
  * @returns {boolean}
  */
 function matchesPosterIdFilter(record, filter) {
-  return String(record.posterId ?? '') === filter.term;
+  return String(record.posterId ?? "") === filter.term;
 }
 
 /**
@@ -281,7 +287,9 @@ function matchesPosterIdFilter(record, filter) {
  */
 function matchesPosterIdFilters(record) {
   if (posterIdFilters.length === 0) return true;
-  return posterIdFilters.some(filter => matchesPosterIdFilter(record, filter));
+  return posterIdFilters.some((filter) =>
+    matchesPosterIdFilter(record, filter),
+  );
 }
 
 /**
@@ -290,7 +298,7 @@ function matchesPosterIdFilters(record) {
  * @returns {boolean}
  */
 function matchesContentFilter(record, filter) {
-  return matchesTerm(record.content ?? '', filter);
+  return matchesTerm(record.content ?? "", filter);
 }
 
 /**
@@ -299,7 +307,7 @@ function matchesContentFilter(record, filter) {
  */
 function matchesContentFilters(record) {
   if (contentFilters.length === 0) return true;
-  return contentFilters.some(filter => matchesContentFilter(record, filter));
+  return contentFilters.some((filter) => matchesContentFilter(record, filter));
 }
 
 function hasScreenshot(record) {
@@ -311,7 +319,7 @@ function hasLink(record) {
 }
 
 function getVisibleMessages() {
-  return messages.filter(record => {
+  return messages.filter((record) => {
     if (!selectedSessionIds.has(record.sessionId)) return false;
     if (!matchesPosterNameFilters(record)) return false;
     if (!matchesPosterIdFilters(record)) return false;
@@ -337,54 +345,56 @@ function sortMessages() {
   messages.sort((a, b) => {
     let va, vb;
     switch (column) {
-      case 'timestamp':
+      case "timestamp":
         va = new Date(a.timestamp);
         vb = new Date(b.timestamp);
         break;
-      case 'session':
+      case "session":
         va = getSessionLabel(a.sessionId);
         vb = getSessionLabel(b.sessionId);
         break;
-      case 'posterName':
-        va = a.posterName ?? '';
-        vb = b.posterName ?? '';
+      case "posterName":
+        va = a.posterName ?? "";
+        vb = b.posterName ?? "";
         break;
-      case 'posterId':
-        va = a.posterId ?? '';
-        vb = b.posterId ?? '';
+      case "posterId":
+        va = a.posterId ?? "";
+        vb = b.posterId ?? "";
         break;
       default:
         return 0;
     }
 
-    if (va < vb) return direction === 'asc' ? -1 : 1;
-    if (va > vb) return direction === 'asc' ? 1 : -1;
+    if (va < vb) return direction === "asc" ? -1 : 1;
+    if (va > vb) return direction === "asc" ? 1 : -1;
     return 0;
   });
 }
 
 function updateSortUI() {
-  document.querySelectorAll('#records-table th.sortable').forEach(th => {
-    th.classList.remove('sort-asc', 'sort-desc');
+  document.querySelectorAll("#records-table th.sortable").forEach((th) => {
+    th.classList.remove("sort-asc", "sort-desc");
     const col = th.dataset.column;
     if (col === sortState.column && sortState.direction) {
-      th.classList.add(sortState.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+      th.classList.add(
+        sortState.direction === "asc" ? "sort-asc" : "sort-desc",
+      );
     }
   });
 }
 
 function cycleSort(column) {
   if (sortState.column === column) {
-    if (sortState.direction === 'asc') sortState.direction = 'desc';
-    else if (sortState.direction === 'desc') {
+    if (sortState.direction === "asc") sortState.direction = "desc";
+    else if (sortState.direction === "desc") {
       sortState.column = null;
       sortState.direction = null;
     } else {
-      sortState.direction = 'asc';
+      sortState.direction = "asc";
     }
   } else {
     sortState.column = column;
-    sortState.direction = 'asc';
+    sortState.direction = "asc";
   }
 
   sortMessages();
@@ -397,38 +407,42 @@ function cycleSort(column) {
 // ---------------------------------------------------------------------------
 
 function renderGroupInfo() {
-  const groupIds = new Set(messages.map(m => m.groupId));
+  const groupIds = new Set(messages.map((m) => m.groupId));
   if (groupIds.size === 0) {
-    els.groupInfo.classList.add('hidden');
+    els.groupInfo.classList.add("hidden");
     return;
   }
 
   const list = els.groupList;
-  list.innerHTML = '';
+  list.innerHTML = "";
 
   for (const groupId of groupIds) {
-    const groupSessions = Array.from(sessions.values()).filter(s => s.groupId === groupId);
-    const session = groupSessions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+    const groupSessions = Array.from(sessions.values()).filter(
+      (s) => s.groupId === groupId,
+    );
+    const session = groupSessions.sort(
+      (a, b) => new Date(b.timestamp) - new Date(a.timestamp),
+    )[0];
     const groupName = session?.groupName ?? MISSING_FIELD;
 
-    const li = document.createElement('li');
+    const li = document.createElement("li");
 
-    const nameRow = document.createElement('div');
-    const nameLabel = document.createElement('span');
-    nameLabel.className = 'label';
-    nameLabel.textContent = 'Group Name:';
-    const nameValue = document.createElement('span');
-    nameValue.className = 'group-name';
+    const nameRow = document.createElement("div");
+    const nameLabel = document.createElement("span");
+    nameLabel.className = "label";
+    nameLabel.textContent = "Group Name:";
+    const nameValue = document.createElement("span");
+    nameValue.className = "group-name";
     nameValue.textContent = groupName;
     nameRow.appendChild(nameLabel);
     nameRow.appendChild(nameValue);
 
-    const idRow = document.createElement('div');
-    const idLabel = document.createElement('span');
-    idLabel.className = 'label';
-    idLabel.textContent = 'Group ID:';
-    const idValue = document.createElement('span');
-    idValue.className = 'group-id';
+    const idRow = document.createElement("div");
+    const idLabel = document.createElement("span");
+    idLabel.className = "label";
+    idLabel.textContent = "Group ID:";
+    const idValue = document.createElement("span");
+    idValue.className = "group-id";
     idValue.textContent = groupId;
     idRow.appendChild(idLabel);
     idRow.appendChild(idValue);
@@ -438,7 +452,7 @@ function renderGroupInfo() {
     list.appendChild(li);
   }
 
-  els.groupInfo.classList.remove('hidden');
+  els.groupInfo.classList.remove("hidden");
 }
 
 // ---------------------------------------------------------------------------
@@ -452,39 +466,40 @@ function renderGroupInfo() {
  * @param {Function} onRemove
  */
 function renderFilterChip(container, filter, hasMatches, onRemove) {
-  const chip = document.createElement('span');
-  chip.className = 'filter-chip' + (hasMatches ? ' has-matches' : ' no-matches');
+  const chip = document.createElement("span");
+  chip.className =
+    "filter-chip" + (hasMatches ? " has-matches" : " no-matches");
 
-  const label = document.createElement('span');
-  label.className = 'filter-chip-label';
+  const label = document.createElement("span");
+  label.className = "filter-chip-label";
   label.textContent = filter.term;
   chip.appendChild(label);
 
   if (filter.matchCase || filter.matchWord) {
-    const badges = document.createElement('span');
-    badges.className = 'filter-chip-badges';
+    const badges = document.createElement("span");
+    badges.className = "filter-chip-badges";
     if (filter.matchCase) {
-      const badge = document.createElement('span');
-      badge.className = 'filter-chip-badge';
-      badge.title = 'Match case';
-      badge.textContent = 'Aa';
+      const badge = document.createElement("span");
+      badge.className = "filter-chip-badge";
+      badge.title = "Match case";
+      badge.textContent = "Aa";
       badges.appendChild(badge);
     }
     if (filter.matchWord) {
-      const badge = document.createElement('span');
-      badge.className = 'filter-chip-badge';
-      badge.title = 'Match whole word';
-      badge.textContent = 'W';
+      const badge = document.createElement("span");
+      badge.className = "filter-chip-badge";
+      badge.title = "Match whole word";
+      badge.textContent = "W";
       badges.appendChild(badge);
     }
     chip.appendChild(badges);
   }
 
-  const remove = document.createElement('button');
-  remove.className = 'filter-chip-remove';
-  remove.textContent = '×';
-  remove.title = 'Remove filter';
-  remove.addEventListener('click', onRemove);
+  const remove = document.createElement("button");
+  remove.className = "filter-chip-remove";
+  remove.textContent = "×";
+  remove.title = "Remove filter";
+  remove.addEventListener("click", onRemove);
   chip.appendChild(remove);
 
   container.appendChild(chip);
@@ -492,17 +507,19 @@ function renderFilterChip(container, filter, hasMatches, onRemove) {
 
 function renderFilters() {
   if (messages.length === 0) {
-    els.filtersSection.classList.add('hidden');
+    els.filtersSection.classList.add("hidden");
     return;
   }
-  els.filtersSection.classList.remove('hidden');
+  els.filtersSection.classList.remove("hidden");
 
   // Compute visible rows once so we can indicate which chips have matches.
   const visible = getVisibleMessages();
 
-  els.posterNameFilters.innerHTML = '';
+  els.posterNameFilters.innerHTML = "";
   posterNameFilters.forEach((filter, index) => {
-    const hasMatches = visible.some(record => matchesPosterNameFilter(record, filter));
+    const hasMatches = visible.some((record) =>
+      matchesPosterNameFilter(record, filter),
+    );
     renderFilterChip(els.posterNameFilters, filter, hasMatches, () => {
       posterNameFilters.splice(index, 1);
       renderFilters();
@@ -510,9 +527,11 @@ function renderFilters() {
     });
   });
 
-  els.posterIdFilters.innerHTML = '';
+  els.posterIdFilters.innerHTML = "";
   posterIdFilters.forEach((filter, index) => {
-    const hasMatches = visible.some(record => matchesPosterIdFilter(record, filter));
+    const hasMatches = visible.some((record) =>
+      matchesPosterIdFilter(record, filter),
+    );
     renderFilterChip(els.posterIdFilters, filter, hasMatches, () => {
       posterIdFilters.splice(index, 1);
       renderFilters();
@@ -520,9 +539,11 @@ function renderFilters() {
     });
   });
 
-  els.contentFilters.innerHTML = '';
+  els.contentFilters.innerHTML = "";
   contentFilters.forEach((filter, index) => {
-    const hasMatches = visible.some(record => matchesContentFilter(record, filter));
+    const hasMatches = visible.some((record) =>
+      matchesContentFilter(record, filter),
+    );
     renderFilterChip(els.contentFilters, filter, hasMatches, () => {
       contentFilters.splice(index, 1);
       renderFilters();
@@ -537,7 +558,7 @@ function renderFilters() {
 
 function renderSessionsAccordion() {
   const hasSessions = sessions.size > 0;
-  els.sessionsSection.classList.toggle('hidden', !hasSessions);
+  els.sessionsSection.classList.toggle("hidden", !hasSessions);
   if (!hasSessions) return;
 
   const counts = new Map();
@@ -546,37 +567,37 @@ function renderSessionsAccordion() {
   }
 
   const tbody = els.sessionsTableBody;
-  tbody.innerHTML = '';
+  tbody.innerHTML = "";
 
   const sortedSessions = Array.from(sessions.values()).sort(
-    (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+    (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
   );
 
   for (const session of sortedSessions) {
     const count = counts.get(session.id) || 0;
 
-    const tr = document.createElement('tr');
+    const tr = document.createElement("tr");
 
-    const checkboxTd = document.createElement('td');
-    checkboxTd.className = 'checkbox-col';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
+    const checkboxTd = document.createElement("td");
+    checkboxTd.className = "checkbox-col";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
     checkbox.checked = selectedSessionIds.has(session.id);
     checkbox.dataset.sessionId = session.id;
-    checkbox.addEventListener('change', onSessionFilterChange);
+    checkbox.addEventListener("change", onSessionFilterChange);
     checkboxTd.appendChild(checkbox);
     tr.appendChild(checkboxTd);
 
-    const idTd = document.createElement('td');
-    idTd.className = 'session-id-col';
+    const idTd = document.createElement("td");
+    idTd.className = "session-id-col";
     idTd.textContent = session.id;
     tr.appendChild(idTd);
 
-    const nameTd = document.createElement('td');
+    const nameTd = document.createElement("td");
     nameTd.textContent = session.groupName ?? MISSING_FIELD;
     tr.appendChild(nameTd);
 
-    const countTd = document.createElement('td');
+    const countTd = document.createElement("td");
     countTd.textContent = String(count);
     tr.appendChild(countTd);
 
@@ -586,16 +607,20 @@ function renderSessionsAccordion() {
 
 function onSessionFilterChange() {
   selectedSessionIds = new Set();
-  els.sessionsTableBody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    if (cb.checked) selectedSessionIds.add(cb.dataset.sessionId);
-  });
+  els.sessionsTableBody
+    .querySelectorAll('input[type="checkbox"]')
+    .forEach((cb) => {
+      if (cb.checked) selectedSessionIds.add(cb.dataset.sessionId);
+    });
   renderTable();
 }
 
 function setAllSessions(checked) {
-  els.sessionsTableBody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.checked = checked;
-  });
+  els.sessionsTableBody
+    .querySelectorAll('input[type="checkbox"]')
+    .forEach((cb) => {
+      cb.checked = checked;
+    });
   onSessionFilterChange();
 }
 
@@ -606,10 +631,10 @@ function setAllSessions(checked) {
 function renderTable() {
   const visible = getVisibleMessages();
   const tbody = els.recordsBody;
-  tbody.innerHTML = '';
+  tbody.innerHTML = "";
 
   for (const record of visible) {
-    const tr = document.createElement('tr');
+    const tr = document.createElement("tr");
 
     tr.appendChild(createCell(formatTimestamp(record.timestamp)));
     tr.appendChild(createCell(record.sessionId));
@@ -625,14 +650,14 @@ function renderTable() {
 }
 
 function createCell(text) {
-  const td = document.createElement('td');
+  const td = document.createElement("td");
   td.textContent = text;
   return td;
 }
 
 function createPosterNameCell(name) {
-  const td = document.createElement('td');
-  td.className = 'poster-name-cell';
+  const td = document.createElement("td");
+  td.className = "poster-name-cell";
   td.textContent = name ?? MISSING_FIELD;
   return td;
 }
@@ -642,28 +667,28 @@ function createPosterNameCell(name) {
  * @param {string|null} peerId
  */
 function createIdCell(peerId) {
-  const td = document.createElement('td');
-  td.className = 'poster-id-cell';
+  const td = document.createElement("td");
+  td.className = "poster-id-cell";
   if (!peerId) {
     td.textContent = MISSING_FIELD;
     return td;
   }
 
-  const a = document.createElement('a');
+  const a = document.createElement("a");
   a.href = `https://web.telegram.org/k/#${peerId}`;
   a.textContent = peerId;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
   td.appendChild(a);
   return td;
 }
 
 function createContentCell(content) {
-  const td = document.createElement('td');
-  td.className = 'content-cell';
-  const div = document.createElement('div');
+  const td = document.createElement("td");
+  td.className = "content-cell";
+  const div = document.createElement("div");
   // Content is always shown in full; no click-to-collapse behavior.
-  div.className = 'content-text expanded';
+  div.className = "content-text expanded";
   div.textContent = content ?? MISSING_FIELD;
   td.appendChild(div);
   return td;
@@ -671,9 +696,9 @@ function createContentCell(content) {
 
 function extractBlobGuid(url) {
   try {
-    return new URL(url).pathname.split('/').pop() || '';
+    return new URL(url).pathname.split("/").pop() || "";
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -685,7 +710,7 @@ function extractBlobGuid(url) {
 function isAllowedUrl(url) {
   try {
     const parsed = new URL(url);
-    return ['http:', 'https:', 'blob:', 'stream:'].includes(parsed.protocol);
+    return ["http:", "https:", "blob:", "stream:"].includes(parsed.protocol);
   } catch {
     return false;
   }
@@ -697,35 +722,35 @@ async function openLocalMedia(guid, event) {
 }
 
 function createMediaCell(media) {
-  const td = document.createElement('td');
-  td.className = 'media-cell';
+  const td = document.createElement("td");
+  td.className = "media-cell";
   if (!media || media.length === 0) {
     td.textContent = MISSING_FIELD;
     return td;
   }
-  const count = document.createElement('div');
-  count.className = 'media-count';
-  count.textContent = `${media.length} media item${media.length === 1 ? '' : 's'}`;
+  const count = document.createElement("div");
+  count.className = "media-count";
+  count.textContent = `${media.length} media item${media.length === 1 ? "" : "s"}`;
   td.appendChild(count);
   for (const url of media) {
     const guid = extractBlobGuid(url);
     const localHandle = guid ? mediaHandles.get(guid) : null;
 
     if (localHandle) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'media-link-button';
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "media-link-button";
       btn.textContent = `${guid} (local)`;
       btn.title = `Open downloaded media: ${guid}`;
-      btn.addEventListener('click', e => openLocalMedia(guid, e));
+      btn.addEventListener("click", (e) => openLocalMedia(guid, e));
       td.appendChild(btn);
     } else if (isAllowedUrl(url)) {
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.textContent = url;
       a.title = url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
       td.appendChild(a);
     }
   }
@@ -733,41 +758,41 @@ function createMediaCell(media) {
 }
 
 function createLinksCell(links) {
-  const td = document.createElement('td');
-  td.className = 'links-cell';
+  const td = document.createElement("td");
+  td.className = "links-cell";
   if (!links || links.length === 0) {
     td.textContent = MISSING_FIELD;
     return td;
   }
-  const count = document.createElement('div');
-  count.className = 'link-count';
-  count.textContent = `${links.length} link${links.length === 1 ? '' : 's'}`;
+  const count = document.createElement("div");
+  count.className = "link-count";
+  count.textContent = `${links.length} link${links.length === 1 ? "" : "s"}`;
   td.appendChild(count);
   for (const url of links) {
     if (!isAllowedUrl(url)) continue;
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.textContent = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
     td.appendChild(a);
   }
   return td;
 }
 
 function createScreenshotCell(messageId) {
-  const td = document.createElement('td');
+  const td = document.createElement("td");
   const handle = screenshotHandles.get(messageId);
   if (!handle) {
     td.textContent = MISSING_FIELD;
     return td;
   }
 
-  const img = document.createElement('img');
-  img.className = 'screenshot-thumb';
-  img.alt = 'Screenshot';
+  const img = document.createElement("img");
+  img.className = "screenshot-thumb";
+  img.alt = "Screenshot";
   loadThumbnail(messageId, handle, img);
-  img.addEventListener('click', () => openLightbox(messageId));
+  img.addEventListener("click", () => openLightbox(messageId));
   td.appendChild(img);
   return td;
 }
@@ -783,7 +808,11 @@ async function loadThumbnail(messageId, handle, img) {
     screenshotBlobUrls.set(messageId, url);
     img.src = url;
   } catch (err) {
-    console.error('[TelegramRecorder] failed to load screenshot', messageId, err);
+    console.error(
+      "[TelegramRecorder] failed to load screenshot",
+      messageId,
+      err,
+    );
   }
 }
 
@@ -811,75 +840,79 @@ async function openLightbox(messageId) {
       screenshotBlobUrls.set(messageId, newUrl);
       els.lightboxImg.src = newUrl;
     } catch (err) {
-      console.error('[TelegramRecorder] failed to open lightbox', messageId, err);
+      console.error(
+        "[TelegramRecorder] failed to open lightbox",
+        messageId,
+        err,
+      );
       return;
     }
   } else {
     els.lightboxImg.src = url;
   }
-  els.lightbox.classList.remove('hidden');
+  els.lightbox.classList.remove("hidden");
 }
 
 function closeLightbox() {
-  els.lightbox.classList.add('hidden');
-  els.lightboxImg.src = '';
+  els.lightbox.classList.add("hidden");
+  els.lightboxImg.src = "";
 }
 
-let currentMediaObjectUrl = '';
+let currentMediaObjectUrl = "";
 
 function mimeFromFilename(filename) {
-  const ext = filename.split('.').pop()?.toLowerCase();
+  const ext = filename.split(".").pop()?.toLowerCase();
   const map = {
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    gif: 'image/gif',
-    webp: 'image/webp',
-    svg: 'image/svg+xml',
-    mp4: 'video/mp4',
-    webm: 'video/webm',
-    mov: 'video/quicktime',
-    mp3: 'audio/mpeg',
-    ogg: 'audio/ogg',
-    pdf: 'application/pdf'
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    mp4: "video/mp4",
+    webm: "video/webm",
+    mov: "video/quicktime",
+    mp3: "audio/mpeg",
+    ogg: "audio/ogg",
+    pdf: "application/pdf",
   };
-  return map[ext] || '';
+  return map[ext] || "";
 }
 
 function detectMimeFromBuffer(buffer) {
-  if (!buffer || buffer.byteLength < 8) return '';
+  if (!buffer || buffer.byteLength < 8) return "";
   const bytes = new Uint8Array(buffer);
   const hex = Array.from(bytes.slice(0, 8))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 
-  if (hex.startsWith('ffd8ff')) return 'image/jpeg';
-  if (hex.startsWith('89504e47')) return 'image/png';
-  if (hex.startsWith('47494638')) return 'image/gif';
-  if (hex.startsWith('25504446')) return 'application/pdf';
+  if (hex.startsWith("ffd8ff")) return "image/jpeg";
+  if (hex.startsWith("89504e47")) return "image/png";
+  if (hex.startsWith("47494638")) return "image/gif";
+  if (hex.startsWith("25504446")) return "application/pdf";
 
   if (buffer.byteLength > 11) {
     const ftyp = String.fromCharCode(...bytes.slice(4, 8));
-    if (ftyp === 'ftyp') {
+    if (ftyp === "ftyp") {
       const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
-      if (brand.startsWith('qt')) return 'video/quicktime';
-      return 'video/mp4';
+      if (brand.startsWith("qt")) return "video/quicktime";
+      return "video/mp4";
     }
   }
 
-  if (hex.startsWith('1a45dfa3')) return 'video/webm';
+  if (hex.startsWith("1a45dfa3")) return "video/webm";
 
-  if (String.fromCharCode(...bytes.slice(0, 4)) === 'OggS') {
-    return 'audio/ogg';
+  if (String.fromCharCode(...bytes.slice(0, 4)) === "OggS") {
+    return "audio/ogg";
   }
 
   if (buffer.byteLength >= 12) {
     const riff = String.fromCharCode(...bytes.slice(0, 4));
     const webp = String.fromCharCode(...bytes.slice(8, 12));
-    if (riff === 'RIFF' && webp === 'WEBP') return 'image/webp';
+    if (riff === "RIFF" && webp === "WEBP") return "image/webp";
   }
 
-  return '';
+  return "";
 }
 
 async function openMediaViewer(guid) {
@@ -888,11 +921,14 @@ async function openMediaViewer(guid) {
   try {
     const file = await handle.getFile();
     const buffer = await file.arrayBuffer();
-    let mime = file.type || mimeFromFilename(handle.name) || detectMimeFromBuffer(buffer);
+    let mime =
+      file.type ||
+      mimeFromFilename(handle.name) ||
+      detectMimeFromBuffer(buffer);
     if (!mime) {
       // Last resort: open externally without a preview.
       const objectUrl = URL.createObjectURL(file);
-      window.open(objectUrl, '_blank');
+      window.open(objectUrl, "_blank");
       // Give the new tab time to load before revoking the object URL.
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
       return;
@@ -902,39 +938,39 @@ async function openMediaViewer(guid) {
     const objectUrl = URL.createObjectURL(blob);
     currentMediaObjectUrl = objectUrl;
 
-    const isImage = mime.startsWith('image/');
-    const isVideo = mime.startsWith('video/');
+    const isImage = mime.startsWith("image/");
+    const isVideo = mime.startsWith("video/");
 
     if (isImage) {
       els.mediaLightboxImg.src = objectUrl;
-      els.mediaLightboxImg.classList.remove('hidden');
-      els.mediaLightboxVideo.classList.add('hidden');
+      els.mediaLightboxImg.classList.remove("hidden");
+      els.mediaLightboxVideo.classList.add("hidden");
     } else if (isVideo) {
       els.mediaLightboxVideo.src = objectUrl;
-      els.mediaLightboxVideo.classList.remove('hidden');
-      els.mediaLightboxImg.classList.add('hidden');
+      els.mediaLightboxVideo.classList.remove("hidden");
+      els.mediaLightboxImg.classList.add("hidden");
     } else {
-      window.open(objectUrl, '_blank');
+      window.open(objectUrl, "_blank");
       // Give the new tab time to load before revoking the object URL.
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-      currentMediaObjectUrl = '';
+      currentMediaObjectUrl = "";
       return;
     }
 
-    els.mediaLightbox.classList.remove('hidden');
+    els.mediaLightbox.classList.remove("hidden");
   } catch (err) {
-    console.error('[TelegramRecorder] failed to open media viewer', guid, err);
+    console.error("[TelegramRecorder] failed to open viewer", guid, err);
   }
 }
 
 function closeMediaViewer() {
-  els.mediaLightbox.classList.add('hidden');
-  els.mediaLightboxImg.src = '';
+  els.mediaLightbox.classList.add("hidden");
+  els.mediaLightboxImg.src = "";
   els.mediaLightboxVideo.pause();
-  els.mediaLightboxVideo.src = '';
+  els.mediaLightboxVideo.src = "";
   if (currentMediaObjectUrl) {
     URL.revokeObjectURL(currentMediaObjectUrl);
-    currentMediaObjectUrl = '';
+    currentMediaObjectUrl = "";
   }
 }
 
@@ -943,23 +979,23 @@ function closeMediaViewer() {
 // ---------------------------------------------------------------------------
 
 const CSV_HEADERS = [
-  'timestamp',
-  'session_id',
-  'session_label',
-  'group_id',
-  'group_name',
-  'poster_name',
-  'poster_id',
-  'content',
-  'links',
-  'media',
-  'screenshot_file',
-  'screenshot_path'
+  "timestamp",
+  "session_id",
+  "session_label",
+  "group_id",
+  "group_name",
+  "poster_name",
+  "poster_id",
+  "content",
+  "links",
+  "media",
+  "screenshot_file",
+  "screenshot_path",
 ];
 
 const CSV_COMMENTS = [
-  '# Screenshots are local files. Resolve paths relative to your telegram-recorder/ folder.',
-  '# Blob URLs in \'media\' column are ephemeral and expire when the recording tab is closed.'
+  "# Screenshots are local files. Resolve paths relative to your telegram-recorder/ folder.",
+  "# Blob URLs in 'media' column are ephemeral and expire when the recording tab is closed.",
 ];
 
 /**
@@ -968,8 +1004,8 @@ const CSV_COMMENTS = [
  * @returns {string}
  */
 function escapeCsvField(value) {
-  const text = value == null ? '' : String(value);
-  return '"' + text.replace(/"/g, '""').replace(/\n/g, '\\n') + '"';
+  const text = value == null ? "" : String(value);
+  return '"' + text.replace(/"/g, '""').replace(/\n/g, "\\n") + '"';
 }
 
 /**
@@ -979,30 +1015,32 @@ function escapeCsvField(value) {
  */
 function buildCsvRows(visibleMessages) {
   const rows = [];
-  rows.push(CSV_HEADERS.join(','));
+  rows.push(CSV_HEADERS.join(","));
   rows.push(...CSV_COMMENTS);
 
   for (const record of visibleMessages) {
     const session = sessions.get(record.sessionId);
-    const screenshotFile = record.screenshotFile ?? '';
-    const screenshotPath = screenshotFile ? `${record.groupId}/${screenshotFile}` : '';
+    const screenshotFile = record.screenshotFile ?? "";
+    const screenshotPath = screenshotFile
+      ? `${record.groupId}/${screenshotFile}`
+      : "";
 
     const row = [
       record.timestamp,
       record.sessionId,
-      session ? new Date(session.timestamp).toLocaleString() : '',
+      session ? new Date(session.timestamp).toLocaleString() : "",
       record.groupId,
-      session?.groupName ?? '',
-      record.posterName ?? '',
-      record.posterId ?? '',
-      record.content ?? '',
-      (record.links ?? []).join('|'),
-      (record.media ?? []).join('|'),
+      session?.groupName ?? "",
+      record.posterName ?? "",
+      record.posterId ?? "",
+      record.content ?? "",
+      (record.links ?? []).join("|"),
+      (record.media ?? []).join("|"),
       screenshotFile,
-      screenshotPath
+      screenshotPath,
     ];
 
-    rows.push(row.map(escapeCsvField).join(','));
+    rows.push(row.map(escapeCsvField).join(","));
   }
 
   return rows;
@@ -1011,32 +1049,34 @@ function buildCsvRows(visibleMessages) {
 async function exportCsv() {
   const visible = getVisibleMessages();
   if (visible.length === 0) {
-    alert('No visible rows to export.');
+    alert("No visible rows to export.");
     return;
   }
 
-  const csvString = buildCsvRows(visible).join('\n') + '\n';
-  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+  const csvString = buildCsvRows(visible).join("\n") + "\n";
+  const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
 
-  const groupId = currentGroupId || messages[0]?.groupId || 'unknown';
+  const groupId = currentGroupId || messages[0]?.groupId || "unknown";
   const suggestedName = `telegram-recorder-${groupId}.csv`;
 
   try {
     const handle = await window.showSaveFilePicker({
       suggestedName,
-      types: [{
-        description: 'CSV files',
-        accept: { 'text/csv': ['.csv'] }
-      }]
+      types: [
+        {
+          description: "CSV files",
+          accept: { "text/csv": [".csv"] },
+        },
+      ],
     });
 
     const writable = await handle.createWritable();
     await writable.write(blob);
     await writable.close();
   } catch (err) {
-    if (err.name === 'AbortError') return;
-    console.error('[TelegramRecorder] save CSV failed', err);
-    alert('Failed to save CSV: ' + (err.message ?? String(err)));
+    if (err.name === "AbortError") return;
+    console.error("[TelegramRecorder] save CSV failed", err);
+    alert("Failed to save CSV: " + (err.message ?? String(err)));
   }
 }
 
@@ -1050,17 +1090,20 @@ function addPosterNameFilter() {
   const filter = {
     term: value,
     matchCase: posterNameMatchCase,
-    matchWord: posterNameMatchWord
+    matchWord: posterNameMatchWord,
   };
   const exists = posterNameFilters.some(
-    f => f.term === filter.term && f.matchCase === filter.matchCase && f.matchWord === filter.matchWord
+    (f) =>
+      f.term === filter.term &&
+      f.matchCase === filter.matchCase &&
+      f.matchWord === filter.matchWord,
   );
   if (!exists) {
     posterNameFilters.push(filter);
     renderFilters();
     renderTable();
   }
-  els.posterNameInput.value = '';
+  els.posterNameInput.value = "";
 }
 
 function addPosterIdFilter() {
@@ -1069,15 +1112,15 @@ function addPosterIdFilter() {
   const filter = {
     term: value,
     matchCase: false,
-    matchWord: false
+    matchWord: false,
   };
-  const exists = posterIdFilters.some(f => f.term === filter.term);
+  const exists = posterIdFilters.some((f) => f.term === filter.term);
   if (!exists) {
     posterIdFilters.push(filter);
     renderFilters();
     renderTable();
   }
-  els.posterIdInput.value = '';
+  els.posterIdInput.value = "";
 }
 
 function addContentFilter() {
@@ -1086,101 +1129,104 @@ function addContentFilter() {
   const filter = {
     term: value,
     matchCase: contentMatchCase,
-    matchWord: contentMatchWord
+    matchWord: contentMatchWord,
   };
   const exists = contentFilters.some(
-    f => f.term === filter.term && f.matchCase === filter.matchCase && f.matchWord === filter.matchWord
+    (f) =>
+      f.term === filter.term &&
+      f.matchCase === filter.matchCase &&
+      f.matchWord === filter.matchWord,
   );
   if (!exists) {
     contentFilters.push(filter);
     renderFilters();
     renderTable();
   }
-  els.contentInput.value = '';
+  els.contentInput.value = "";
 }
 
-els.openFolder.addEventListener('click', openFolder);
+els.openFolder.addEventListener("click", openFolder);
 
-els.addPosterName.addEventListener('click', addPosterNameFilter);
-els.posterNameInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
+els.addPosterName.addEventListener("click", addPosterNameFilter);
+els.posterNameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
     e.preventDefault();
     addPosterNameFilter();
   }
 });
 
-els.posterNameMatchCase.addEventListener('change', () => {
+els.posterNameMatchCase.addEventListener("change", () => {
   posterNameMatchCase = els.posterNameMatchCase.checked;
 });
 
-els.posterNameMatchWord.addEventListener('change', () => {
+els.posterNameMatchWord.addEventListener("change", () => {
   posterNameMatchWord = els.posterNameMatchWord.checked;
 });
 
-els.addPosterId.addEventListener('click', addPosterIdFilter);
-els.posterIdInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
+els.addPosterId.addEventListener("click", addPosterIdFilter);
+els.posterIdInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
     e.preventDefault();
     addPosterIdFilter();
   }
 });
 
-els.addContent.addEventListener('click', addContentFilter);
-els.contentInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
+els.addContent.addEventListener("click", addContentFilter);
+els.contentInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
     e.preventDefault();
     addContentFilter();
   }
 });
 
-els.contentMatchCase.addEventListener('change', () => {
+els.contentMatchCase.addEventListener("change", () => {
   contentMatchCase = els.contentMatchCase.checked;
 });
 
-els.contentMatchWord.addEventListener('change', () => {
+els.contentMatchWord.addEventListener("change", () => {
   contentMatchWord = els.contentMatchWord.checked;
 });
 
-els.requireScreenshot.addEventListener('change', () => {
+els.requireScreenshot.addEventListener("change", () => {
   requireScreenshot = els.requireScreenshot.checked;
   renderFilters();
   renderTable();
 });
 
-els.requireLink.addEventListener('change', () => {
+els.requireLink.addEventListener("change", () => {
   requireLink = els.requireLink.checked;
   renderFilters();
   renderTable();
 });
 
-els.sessionsToggle.addEventListener('click', () => {
-  const expanded = els.sessionsPanel.classList.toggle('hidden');
-  els.sessionsToggle.setAttribute('aria-expanded', String(!expanded));
-  els.sessionsToggle.textContent = expanded ? '▶ Sessions' : '▼ Sessions';
+els.sessionsToggle.addEventListener("click", () => {
+  const expanded = els.sessionsPanel.classList.toggle("hidden");
+  els.sessionsToggle.setAttribute("aria-expanded", String(!expanded));
+  els.sessionsToggle.textContent = expanded ? "▶ Sessions" : "▼ Sessions";
 });
 
-els.selectAllSessions.addEventListener('click', () => setAllSessions(true));
-els.deselectAllSessions.addEventListener('click', () => setAllSessions(false));
+els.selectAllSessions.addEventListener("click", () => setAllSessions(true));
+els.deselectAllSessions.addEventListener("click", () => setAllSessions(false));
 
-els.exportCsv.addEventListener('click', exportCsv);
+els.exportCsv.addEventListener("click", exportCsv);
 
-document.querySelectorAll('#records-table th.sortable').forEach(th => {
-  th.addEventListener('click', () => cycleSort(th.dataset.column));
+document.querySelectorAll("#records-table th.sortable").forEach((th) => {
+  th.addEventListener("click", () => cycleSort(th.dataset.column));
 });
 
-els.lightbox.addEventListener('click', closeLightbox);
-els.mediaLightbox.addEventListener('click', closeMediaViewer);
-document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape') return;
-  if (!els.lightbox.classList.contains('hidden')) {
+els.lightbox.addEventListener("click", closeLightbox);
+els.mediaLightbox.addEventListener("click", closeMediaViewer);
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!els.lightbox.classList.contains("hidden")) {
     closeLightbox();
   }
-  if (!els.mediaLightbox.classList.contains('hidden')) {
+  if (!els.mediaLightbox.classList.contains("hidden")) {
     closeMediaViewer();
   }
 });
 
-window.addEventListener('beforeunload', () => {
+window.addEventListener("beforeunload", () => {
   for (const url of screenshotBlobUrls.values()) {
     URL.revokeObjectURL(url);
   }
