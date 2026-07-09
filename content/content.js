@@ -784,6 +784,18 @@
   }
 
   /**
+   * Find a container close to where the topbar lives for the no-topbar fallback.
+   * The topbar is a sibling of the bubbles area, so bubbles' parent is the best
+   * scoped target. Falls back to `.main`/`.chat` and only then `document.body`.
+   * @returns {Element}
+   */
+  function getTopbarContainer() {
+    const bubbles = getBubblesContainer();
+    if (bubbles?.parentElement) return bubbles.parentElement;
+    return document.querySelector('.main, .chat') || document.body;
+  }
+
+  /**
    * Observe the top bar to detect chat navigation without polling.
    * The top bar is replaced when the user switches chats and removed when
    * no chat is selected, so watching its parent catches all transitions.
@@ -794,17 +806,30 @@
 
     const topbar = document.querySelector(TOPBAR_SELECTOR);
     if (!topbar) {
-      // No chat open yet; watch the main/chat container for a topbar to appear.
-      const container = document.querySelector('.main, .chat') || document.body;
+      // No chat open yet; watch the scoped chat container for a topbar to appear.
+      const container = getTopbarContainer();
       const observer = new MutationObserver(() => {
         const newTopbar = document.querySelector(TOPBAR_SELECTOR);
         if (newTopbar) {
           observer.disconnect();
+          window.clearTimeout(timeout);
           observeTopbarElement(newTopbar);
         }
       });
       observer.observe(container, { childList: true, subtree: true });
-      topbarObserver = observer;
+
+      // Safety net: stop observing after a few seconds if no chat is opened.
+      const timeout = window.setTimeout(() => {
+        observer.disconnect();
+        if (topbarObserver === observer) topbarObserver = null;
+      }, 10000);
+
+      topbarObserver = {
+        disconnect() {
+          observer.disconnect();
+          window.clearTimeout(timeout);
+        }
+      };
       return;
     }
 
