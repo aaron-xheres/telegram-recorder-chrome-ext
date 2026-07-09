@@ -28,8 +28,6 @@
   var recordedSet = new Set();
 
   var isProcessing = false;
-  var navPollInterval = null;
-  var lastLocationHref = location.href;
   var eventAbortController = new AbortController();
   var downloadMediaEnabled = true;
   /** @type {Map<string, string>} */
@@ -41,13 +39,23 @@
   var scanInterval = null;
   /** @type {QueueItem[]} */
   var queue = [];
+  /** @type {MutationObserver|null} */
+  var topbarObserver = null;
+  /** @type {string} */
+  var lastTopbarGroupId = '';
 
   const GROUP_NAME_SELECTORS = [
+    '.sidebar-header.topbar .chat-info .peer-title',
     '.chat-info .peer-title',
     '.chat-info-title',
     '.chat-info .chat-info-title',
     '.topbar .peer-title',
     'title'
+  ];
+  const TOPBAR_SELECTOR = '.sidebar-header.topbar';
+  const TOPBAR_PEER_ID_SELECTORS = [
+    '.person-avatar[data-peer-id]',
+    '.peer-title[data-peer-id]'
   ];
   const BUBBLES_SELECTOR = '.bubbles';
   const BUBBLE_SELECTOR = '.bubble';
@@ -84,13 +92,31 @@
   }
 
   /**
+   * Extract the current chat/group peer ID from the top bar.
+   * The top bar is unique and updated synchronously with navigation.
+   * @returns {string|null}
+   */
+  function getTopbarGroupId() {
+    const topbar = document.querySelector(TOPBAR_SELECTOR);
+    if (!topbar) return null;
+    for (const selector of TOPBAR_PEER_ID_SELECTORS) {
+      const el = topbar.querySelector(selector);
+      if (el?.dataset.peerId) return el.dataset.peerId;
+    }
+    return null;
+  }
+
+  /**
    * @returns {string|null}
    */
   function getGroupId() {
-    // Telegram Web K puts the current chat identifier in the URL.
-    // Prefer it because the DOM may lag behind navigation.
+    // Prefer the top bar: it is unique and updates synchronously with chat
+    // navigation, unlike the URL hash which can lag or miss SPA transitions.
+    const topbarId = getTopbarGroupId();
+    if (topbarId) return topbarId;
+
+    // Fallback to the URL hash fragment.
     const rawHash = location.hash?.replace(/^#/, '') ?? '';
-    // Hashes may contain query params (e.g. #@username?folder=...).
     const hash = rawHash.split('?')[0];
 
     if (hash) {
@@ -106,12 +132,6 @@
       if (tgaddrMatch) {
         return '@' + tgaddrMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
       }
-    }
-
-    // Defensive fallback for non-hash routing variants (Web K normally uses hashes).
-    const usernameMatch = location.pathname.match(/@([a-zA-Z0-9_]+)/);
-    if (usernameMatch) {
-      return '@' + usernameMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
     }
 
     // Fallback to the bubbles container's data-peer-id.
@@ -695,7 +715,7 @@
     // Safety net: re-scan the DOM every few seconds for any bubble we missed.
     scanInterval = window.setInterval(scanForMissedBubbles, 3000);
 
-    startNavPolling();
+    startTopbarObserver();
     console.log('[TelegramRecorder] started recording', {
       sessionId,
       groupId: currentGroupId,
@@ -722,7 +742,7 @@
     recordedSet.clear();
     queue = [];
     isProcessing = false;
-    stopNavPolling();
+    stopTopbarObserver();
 
     console.log('[TelegramRecorder] stopped recording');
   }
@@ -748,26 +768,108 @@
       });
       stopRecordingAndNotify();
     }
-    lastLocationHref = location.href;
   }
 
-  function startNavPolling() {
-    stopNavPolling();
-    lastLocationHref = location.href;
-    navPollInterval = window.setInterval(() => {
-      if (location.href !== lastLocationHref) {
+  /**
+   * Observe the top bar to detect chat navigation without polling.
+   * The top bar is replaced when the user switches chats and removed when
+   * no chat is selected, so watching its parent catches all transitions.
+   */
+  function startTopbarObserver() {
+    stopTopbarObserver();
+    lastTopbarGroupId = getTopbarGroupId() ?? '';
+
+    const topbar = document.querySelector(TOPBAR_SELECTOR);
+    if (!topbar) {
+      // No chat open yet; watch the main/chat container for a topbar to appear.
+      const container = document.querySelector('.main, .chat') || document.body;
+      const observer = new MutationObserver(() => {
+        const newTopbar = document.querySelector(TOPBAR_SELECTOR);
+        if (newTopbar) {
+          observer.disconnect();
+          observeTopbarElement(newTopbar);
+        }
+      });
+      observer.observe(container, { childList: true, subtree: true });
+      topbarObserver = observer;
+      return;
+    }
+
+    observeTopbarElement(topbar);
+  }
+
+  /**
+   * Watch the topbar's parent for replacement/removal and the topbar itself
+   * for attribute/subtree changes.
+   * @param {Element} topbar
+   */
+  function observeTopbarElement(topbar) {
+    const parent = topbar.parentElement;
+    if (!parent) return;
+
+    let stale = false;
+    const observers = [];
+
+    const notifyIfChanged = () => {
+      if (stale) return;
+      const newGroupId = getTopbarGroupId();
+      if (newGroupId !== lastTopbarGroupId) {
+        lastTopbarGroupId = newGroupId ?? '';
         onNavigation();
       }
-    }, 500);
+    };
+
+    const parentObserver = new MutationObserver(mutations => {
+      let topbarChanged = false;
+      for (const mutation of mutations) {
+        if (mutation.type !== 'childList') continue;
+        for (const node of mutation.removedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE && node.matches(TOPBAR_SELECTOR)) {
+            topbarChanged = true;
+            break;
+          }
+        }
+        if (!topbarChanged) {
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType === Node.ELEMENT_NODE && node.matches(TOPBAR_SELECTOR)) {
+              topbarChanged = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!topbarChanged) return;
+
+      // The observed topbar was replaced or removed; stop observing it and
+      // re-attach to the new topbar if one exists.
+      stale = true;
+      observers.forEach(o => o.disconnect());
+      startTopbarObserver();
+      notifyIfChanged();
+    });
+    parentObserver.observe(parent, { childList: true });
+    observers.push(parentObserver);
+
+    const subtreeObserver = new MutationObserver(notifyIfChanged);
+    subtreeObserver.observe(topbar, { childList: true, subtree: true, attributes: true });
+    observers.push(subtreeObserver);
+
+    topbarObserver = {
+      disconnect() {
+        observers.forEach(o => o.disconnect());
+      }
+    };
   }
 
-  function stopNavPolling() {
-    if (navPollInterval !== null) {
-      window.clearInterval(navPollInterval);
-      navPollInterval = null;
+  function stopTopbarObserver() {
+    if (topbarObserver) {
+      topbarObserver.disconnect();
+      topbarObserver = null;
     }
   }
 
+  // Keep popstate/hashchange as a lightweight backup; the topbar observer handles
+  // the actual DOM transitions that SPA events sometimes miss.
   window.addEventListener('popstate', onNavigation, { signal: eventAbortController.signal });
   window.addEventListener('hashchange', onNavigation, { signal: eventAbortController.signal });
 
