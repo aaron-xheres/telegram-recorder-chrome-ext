@@ -76,6 +76,9 @@ telegram-recorder-chrome-ext/
     └── icon-128.png
 ```
 
+Icon PNGs are optional. The extension runs without them; add them and reference them in
+`manifest.json` if you want toolbar icons.
+
 ### Component Responsibilities
 
 | Component | Context | Responsibilities |
@@ -86,7 +89,7 @@ telegram-recorder-chrome-ext/
 | `screenshot.js` | Same context as `content.js` | Chooses canvas or tab capture strategy |
 | `screenshot-canvas.js` | Same context as `content.js` | html2canvas-based full-bubble render |
 | `screenshot-tab.js` | Same context as `content.js` | `chrome.tabs.captureVisibleTab` + viewport crop |
-| `popup.html/js` | Extension popup | Page validation, group info display, start/stop, session status |
+| `popup.html/js` | Extension popup | Page validation, group info display, start/stop, session status, screenshot/media settings |
 | `viewer.html/js` | `chrome-extension://...` page | File System Access API, table render, session filter, CSV export, media/screenshot lightboxes |
 
 ### MV3 Communication Channels
@@ -577,7 +580,7 @@ lazy-loaded photos that were not present at extraction time.
 ### Process (per message)
 
 ```
-1. Choose capture strategy (popup setting; default = canvas-first):
+1. Choose capture strategy (`chrome.storage.local` key `useCanvasCapture`; default = true/canvas-first):
    a. Canvas-first: try html2canvas full-bubble render
       → if successful, return PNG data URL
    b. Fallback / disabled: use tab capture
@@ -592,7 +595,7 @@ lazy-loaded photos that were not present at extraction time.
    f. visibleRect = intersection of rect with the current viewport
    g. dpr = window.devicePixelRatio  — account for retina displays
 
-   h. content.js → background: { type: 'CAPTURE_TAB' }
+   h. content.js → background: { type: 'CAPTURE_TAB', focus: true }
    i. background restores the sender window if minimized, focuses it, activates the
       sender tab, then calls chrome.tabs.captureVisibleTab({ format: 'png' }) with 3 retries.
       Empty data URLs are treated as failures and retried.
@@ -661,23 +664,28 @@ async function processNext():
 ### Data Capture Timing
 
 ```
-On enqueue:
-  messageData = extractor.extract(bubble)   ← immediate, before queue wait
+On bubble detection (before enqueue):
   recordedSet.add(mid)                      ← immediate, prevents double-processing
-  initial media download attempt            ← may be empty for lazy-loaded photos
+  messageData = extractor.extract(bubble)   ← immediate
+  if bubbleHasMedia(bubble):
+    waitForMediaReady(bubble)               ← allow lazy/injected media to settle
+    re-extract media
+  messageData.mediaFiles = downloadMessageMedia(messageData.media)
+  queue.push({ bubble, messageData })
 
 On dequeue (when screenshot slot is free):
-  if bubble contains media:
-    scroll bubble into view
-    wait for lazy media to load
-    re-extract and download media           ← catches lazy-loaded photos/videos
+  if bubbleHasMedia(bubble):
+    bubble.scrollIntoView({ block: 'center', behavior: 'instant' })
+    wait for contained <img>/<video> to load
+    re-extract media and download any new blob:/stream: URLs
   screenshot pipeline for this bubble
   save messageData + screenshot
 ```
 
-Text, links, and sender metadata are captured immediately at enqueue time. Media is finalized
-when the bubble is scrolled into view for its screenshot, because Telegram lazy-loads photo blobs
-and only injects the real `<img>` source at that point.
+Text, links, and sender metadata are captured immediately when the bubble is detected. Media is
+first extracted after a short readiness wait, then finalized when the bubble is scrolled into view
+for its screenshot, because Telegram lazy-loads photo blobs and only injects the real `<img>`
+source at that point.
 
 ---
 
@@ -788,20 +796,20 @@ Viewer opens a single group folder (e.g. `telegram-recorder/-2350891274`).
 
 ```
 User clicks "Start" in popup
-  → popup.js → background: { type: 'START_RECORDING', groupId, groupName }
+  → popup.js → background: { type: 'START_RECORDING', tabId, groupId, groupName }
   → background:
       sessionId = Date.now().toString()
-      state = { recording: true, sessionId, groupId, groupName }
-      chrome.storage.local.set(state)
-      chrome.storage.session.set({ recordedSet: [] })
+      activeSessions.set(tabId, { tabId, sessionId, groupId, groupName })
+      persist activeSessions array to chrome.storage.local
       manifest = { id: sessionId, timestamp: ISO, groupId, groupName }
       chrome.downloads.download({
         filename: `telegram-recorder/${groupId}/manifest-${sessionId}.json`,
         url: jsonDataUrl(manifest)
       })
-  → background → content.js: { type: 'START_RECORDING', sessionId }
+  → background → content.js: { type: 'START_RECORDING', sessionId, groupId }
   → content.js:
       baselineSet = new Set( all .bubble[data-mid] currently in DOM )
+      recordedSet = new Set()
       attach MutationObserver to .bubbles container
 ```
 
@@ -811,9 +819,10 @@ User clicks "Start" in popup
 MutationObserver fires
   → handleMutations() → processBubbleNode(bubble)
     → guard checks (data-mid, service class, baselineSet, recordedSet)
+    → recordedSet.add(mid)                       ← immediate, prevents double-processing
     → messageData = extractor.extract(bubble)   ← immediate
-    → recordedSet.add(mid)                       ← immediate
-    → initial media download attempt
+    → if bubbleHasMedia(bubble): waitForMediaReady + re-extract media
+    → messageData.mediaFiles = downloadMessageMedia(messageData.media)
     → queue.push({ bubble, messageData })
     → processNext() if not already processing
 
@@ -835,16 +844,18 @@ processNext():
 
 ```
 User clicks "Stop"
-  → popup.js → background: { type: 'STOP_RECORDING' }
+  → popup.js → background: { type: 'STOP_RECORDING', tabId }
   → background:
-      chrome.storage.local.set({ recording: false, sessionId: null })
-  → background → content.js: { type: 'STOP_RECORDING' }
+      removes tab's session from activeSessions and persists to chrome.storage.local
+      sends STOP_RECORDING to the tab's content script
   → content.js:
       observer.disconnect()
       observer = null
       baselineSet.clear()
+      recordedSet.clear()
       queue = []           ← discard pending queue (in-flight capture completes)
       isProcessing = false
+      stop navigation polling
 ```
 
 Note: any message currently mid-capture when Stop is clicked will complete and be saved.
@@ -853,10 +864,10 @@ Messages still in queue are discarded.
 ### 11.4 Chat Navigation While Recording
 
 ```
-content.js detects URL change (popstate / hashchange listener on window):
+content.js detects URL change via a 500 ms `location.href` poll plus popstate / hashchange listeners:
   if (recording && newChatId !== currentGroupId):
     → send AUTO_STOPPED to background
-    → background: state = { recording: false, sessionId: null }
+    → background: removes tab session from activeSessions and persists
     → content.js: observer.disconnect(), clear queue
     → popup (if open): re-renders to "Stopped" state with note "Chat changed"
 ```
@@ -953,33 +964,43 @@ Case E — Telegram Web K, recording active:
   └─────────────────────────────────────────┘
 ```
 
+### Popup Settings
+
+Below the status row the popup shows two toggles persisted in `chrome.storage.local`:
+
+- **Use canvas capture** (`useCanvasCapture`, default `true`) — when enabled, the screenshot
+  pipeline tries `html2canvas` first and falls back to tab capture if the canvas render fails.
+- **Download media** (`downloadMedia`, default `true`) — when enabled, the content script
+  downloads photos, videos, GIFs, and files into the group's `media/` folder.
+
 ### Group Info Extraction
 
 `popup.js` sends `GET_GROUP_INFO` to the content script via `chrome.tabs.sendMessage`.
 
 Content script responds with `{ groupId, groupName }` extracted from:
-- `groupId`: `.bubbles[data-peer-id]` or URL hash fragment
-- `groupName`: `.chat-info .peer-title` text content (research required for exact selector)
+- `groupId`: URL hash fragment (preferred), with fallback to `.bubbles[data-peer-id]`
+- `groupName`: first match among `.chat-info .peer-title`, `.chat-info-title`, `.topbar .peer-title`,
+  or `<title>` text content
 
-If no `.bubbles` in DOM (no chat open) → content script responds `{ groupId: null, groupName: null }`.
+If no chat identifier can be resolved → content script responds `{ groupId: null, groupName: null }`.
 
 ### Popup → Background → Content Message Flow
 
 ```
 Popup opens:
-  1. popup reads chrome.storage.local → render current state
+  1. popup queries GET_ACTIVE_SESSIONS from background → render current state
   2. popup sends GET_GROUP_INFO → content.js → responds with group data
   3. popup updates group info display
 
 Start clicked:
-  1. popup → background: START_RECORDING { groupId, groupName }
+  1. popup → background: START_RECORDING { tabId, groupId, groupName }
   2. background updates storage, creates manifest, notifies content.js
-  3. popup re-reads storage → re-renders
+  3. popup re-reads active sessions → re-renders
 
 Stop clicked:
-  1. popup → background: STOP_RECORDING
+  1. popup → background: STOP_RECORDING { tabId }
   2. background updates storage, notifies content.js
-  3. popup re-reads storage → re-renders
+  3. popup re-reads active sessions → re-renders
 ```
 
 ---
@@ -1017,7 +1038,7 @@ Stop clicked:
 |---|---|---|
 | Timestamp | Yes — default DESC | Formatted to local time via `toLocaleString()` |
 | Session | Yes | Raw session ID (Unix timestamp) |
-| Poster Name | Yes + multi-term filter | `—` when `null`; supports `admin` keyword for anonymous posts |
+| Poster Name | Yes + multi-term filter | `—` when `null`; supports `admin`, `—`, or `-` keyword for anonymous posts |
 | Poster ID | Yes | `—` when `null`; otherwise a clickable link to `https://web.telegram.org/k/#<posterId>` |
 | Message Content | No | Full text shown in-cell; not collapsible |
 | Media | No | Count label + each downloaded media file rendered as clickable anchor; stacked vertically. Click opens a media lightbox (image or video) loaded from the local file handle |
@@ -1131,7 +1152,8 @@ Export applies to currently **visible rows** (respects session filter + message 
 # Blob URLs in 'media' column are ephemeral and expire when the recording tab is closed.
 ```
 
-**Generation:** client-side `Blob` + `URL.createObjectURL()` + programmatic `<a download="export.csv">` click. No server.
+**Generation:** client-side `Blob` + `window.showSaveFilePicker()` with a suggested filename.
+No server. If the picker is cancelled or unavailable, no file is written.
 
 ---
 
@@ -1244,7 +1266,7 @@ No file writes occur on collision. No error thrown. Silent skip.
 | `tabs` | `chrome.tabs.captureVisibleTab()`, `chrome.tabs.sendMessage()` |
 | `activeTab` | Accessing active tab URL in popup |
 | `downloads` | `chrome.downloads.download()` for all file saves |
-| `storage` | `chrome.storage.local` + `chrome.storage.session` |
+| `storage` | `chrome.storage.local` (session storage is available but unused) |
 | `scripting` | `chrome.scripting.executeScript()` for content-script reinjection |
 | `host_permissions: web.telegram.org` | Content script injection |
 | `web_accessible_resources: viewer/*` | Allowing the viewer page to load its own assets from any origin |
@@ -1262,7 +1284,7 @@ No file writes occur on collision. No error thrown. Silent skip.
 | `hide-name` = anonymous sender | No name available | `posterName = null`; `posterId = groupId` (accurate — posted as group entity) |
 | Emoji rendered as `<img>` | Mixed with text content | Clone + remove `img.emoji` before `textContent` read |
 | Multiple messages arrive rapidly | Screenshot serialization lag | FIFO queue; data captured immediately at enqueue time, screenshot taken when slot free |
-| MV3 service worker may terminate | In-flight state lost | `chrome.storage.session` for `recordedSet`; rehydrate on wake |
+| MV3 service worker may terminate | In-flight state lost | `recordedSet` lives in each content script's memory; content scripts re-request their session via `GET_SESSION` after the service worker wakes |
 | Chat navigation while recording | Observer on wrong DOM | Auto-stop on URL change; user must restart on new chat |
 | Edited messages reuse `data-mid` | Re-record would overwrite | Treated as collision — original preserved, edit not re-recorded |
 | Service messages have `data-mid` | Would be recorded as normal messages | Skipped by `bubble.classList.contains('service')` |
@@ -1291,7 +1313,7 @@ No file writes occur on collision. No error thrown. Silent skip.
 | 2 | `data-mid` uniqueness across sessions | Confirm IDs don't repeat across different recording sessions for same group |
 | 3 | `subtree: true` observer performance | Verify no performance degradation in high-volume chats |
 | 4 | Scroll + capture timing | Validate 150ms wait is sufficient; test on slow connections and media-heavy messages |
-| 5 | Chat navigation event | Confirm `hashchange` or `popstate` fires when switching chats in Web K |
+| 5 | Chat navigation detection | Use a `location.href` poll (500 ms) plus `hashchange`/`popstate` listeners because SPA navigation does not always fire the events reliably |
 
 ---
 
