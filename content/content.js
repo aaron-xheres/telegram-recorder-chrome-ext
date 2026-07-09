@@ -108,6 +108,7 @@
       }
     }
 
+    // Defensive fallback for non-hash routing variants (Web K normally uses hashes).
     const usernameMatch = location.pathname.match(/@([a-zA-Z0-9_]+)/);
     if (usernameMatch) {
       return '@' + usernameMatch[1].replace(/[^a-zA-Z0-9_]/g, '_');
@@ -639,6 +640,9 @@
     if (baselineSet.has(mid)) return;
     if (recordedSet.has(mid)) return;
 
+    // Add to recordedSet before the first await so concurrent callers (e.g. a
+    // mutation and the safety scan) cannot both enter the extraction path for
+    // the same message ID.
     recordedSet.add(mid);
     let messageData = await extract(bubble, currentSessionId);
     // Ensure every record in this session uses the same group identifier
