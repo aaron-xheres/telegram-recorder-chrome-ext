@@ -677,6 +677,20 @@ function extractBlobGuid(url) {
   }
 }
 
+/**
+ * Allow only safe, expected URL schemes in rendered links.
+ * @param {string} url
+ * @returns {boolean}
+ */
+function isAllowedUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:', 'blob:', 'stream:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
 async function openLocalMedia(guid, event) {
   event.preventDefault();
   await openMediaViewer(guid);
@@ -693,7 +707,7 @@ function createMediaCell(media) {
   count.className = 'media-count';
   count.textContent = `${media.length} media item${media.length === 1 ? '' : 's'}`;
   td.appendChild(count);
-    for (const url of media) {
+  for (const url of media) {
     const guid = extractBlobGuid(url);
     const localHandle = guid ? mediaHandles.get(guid) : null;
 
@@ -705,7 +719,7 @@ function createMediaCell(media) {
       btn.title = `Open downloaded media: ${guid}`;
       btn.addEventListener('click', e => openLocalMedia(guid, e));
       td.appendChild(btn);
-    } else {
+    } else if (isAllowedUrl(url)) {
       const a = document.createElement('a');
       a.href = url;
       a.textContent = url;
@@ -730,6 +744,7 @@ function createLinksCell(links) {
   count.textContent = `${links.length} link${links.length === 1 ? '' : 's'}`;
   td.appendChild(count);
   for (const url of links) {
+    if (!isAllowedUrl(url)) continue;
     const a = document.createElement('a');
     a.href = url;
     a.textContent = url;
@@ -878,7 +893,8 @@ async function openMediaViewer(guid) {
       // Last resort: open externally without a preview.
       const objectUrl = URL.createObjectURL(file);
       window.open(objectUrl, '_blank');
-      URL.revokeObjectURL(objectUrl);
+      // Give the new tab time to load before revoking the object URL.
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
       return;
     }
 
@@ -899,7 +915,8 @@ async function openMediaViewer(guid) {
       els.mediaLightboxImg.classList.add('hidden');
     } else {
       window.open(objectUrl, '_blank');
-      URL.revokeObjectURL(objectUrl);
+      // Give the new tab time to load before revoking the object URL.
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
       currentMediaObjectUrl = '';
       return;
     }
@@ -980,7 +997,7 @@ function buildCsvRows(visibleMessages) {
       record.posterId ?? '',
       record.content ?? '',
       (record.links ?? []).join('|'),
-      ((record.media ?? record.images) ?? []).join('|'),
+      (record.media ?? []).join('|'),
       screenshotFile,
       screenshotPath
     ];
