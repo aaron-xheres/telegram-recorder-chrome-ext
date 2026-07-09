@@ -853,13 +853,14 @@ User clicks "Stop"
       observer = null
       baselineSet.clear()
       recordedSet.clear()
-      queue = []           ← discard pending queue (in-flight capture completes)
-      isProcessing = false
-      stop navigation polling
+      stop navigation observer
+      if queue has items and processor is idle:
+        processNext()  ← drain already-detected messages
 ```
 
 Note: any message currently mid-capture when Stop is clicked will complete and be saved.
-Messages still in queue are discarded.
+Messages already detected and queued before Stop will also be processed (JSON saved even if
+screenshot fails). No messages detected after Stop are enqueued.
 
 ### 11.4 Chat Navigation While Recording
 
