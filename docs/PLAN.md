@@ -869,10 +869,10 @@ content.js detects chat navigation by observing the unique `.sidebar-header.topb
   - top bar is replaced when the user switches chats → parent MutationObserver fires
   - top bar attributes/subtree mutations (e.g. `data-peer-id` change) also trigger check
   - popstate / hashchange listeners kept as lightweight backup
-  if (recording && newChatId !== currentGroupId):
+  if (recording && newGroupId && newGroupId !== currentGroupId):
     → send AUTO_STOPPED to background
     → background: removes tab session from activeSessions and persists
-    → content.js: observer.disconnect(), clear queue
+    → content.js: stop observers, drain already-queued messages if processor idle
     → popup (if open): re-renders to "Stopped" state with note "Chat changed"
 ```
 
@@ -1204,7 +1204,9 @@ On service worker wake (MV3 service workers may terminate and restart):
 |---|---|---|
 | `baselineSet` | `Set<string>` | `data-mid` values present at START |
 | `recordedSet` | `Set<string>` | `data-mid` values processed in this session |
-| `observer` | `MutationObserver \| null` | Active observer instance |
+| `observer` | `MutationObserver \| null` | Active bubbles observer instance |
+| `topbarObserver` | `MutationObserver \| null` | Active topbar navigation observer |
+| `lastTopbarGroupId` | `string` | Last seen topbar `data-peer-id` for change detection |
 | `queue` | `Array<QueueItem>` | Pending screenshot/save items |
 | `isProcessing` | `boolean` | Queue lock flag |
 
@@ -1314,7 +1316,7 @@ No file writes occur on collision. No error thrown. Silent skip.
 
 | # | Task | Goal |
 |---|---|---|
-| 1 | Group name selector | Confirm exact selector for chat name (`.chat-info .peer-title` or `<title>`) |
+| 1 | Group name selector | **Resolved** — use `.sidebar-header.topbar .chat-info .peer-title` as primary, fall back to `.chat-info .peer-title`, `.chat-info-title`, `.topbar .peer-title`, or `<title>` |
 | 2 | `data-mid` uniqueness across sessions | Confirm IDs don't repeat across different recording sessions for same group |
 | 3 | `subtree: true` observer performance | Verify no performance degradation in high-volume chats |
 | 4 | Scroll + capture timing | Validate 150ms wait is sufficient; test on slow connections and media-heavy messages |
