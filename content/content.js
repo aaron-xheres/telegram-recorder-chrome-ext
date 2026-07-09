@@ -501,6 +501,7 @@
    * @param {import('./extractor.js').MessageRecord} messageData
    */
   function enqueue(bubble, messageData) {
+    if (!isRecording) return;
     queue.push({ bubble, messageData });
     if (!isProcessing) processNext();
   }
@@ -665,6 +666,8 @@
     // the same message ID.
     recordedSet.add(mid);
     let messageData = await extract(bubble, currentSessionId);
+    if (!isRecording) return;
+
     // Ensure every record in this session uses the same group identifier
     // (numeric peer ID or sanitized @username) as the manifest/folder.
     if (!messageData.groupId || messageData.groupId !== currentGroupId) {
@@ -676,13 +679,16 @@
     // This is driven by DOM/network readiness rather than a fixed timer.
     if (bubbleHasMedia(bubble)) {
       await waitForMediaReady(bubble, 3000);
+      if (!isRecording) return;
       const reMedia = await extractMedia(bubble);
+      if (!isRecording) return;
       if (reMedia.length > 0) {
         messageData = { ...messageData, media: reMedia };
       }
     }
 
     messageData.mediaFiles = await downloadMessageMedia(messageData.media, currentGroupId);
+    if (!isRecording) return;
 
     enqueue(bubble, messageData);
   }
@@ -706,6 +712,8 @@
     currentGroupId = groupId || getGroupId() || '';
     baselineSet = buildBaselineSet();
     recordedSet = new Set();
+    queue = [];
+    isProcessing = false;
 
     // Observe the entire bubbles subtree so we catch messages regardless of whether
     // Telegram wraps them in .bubbles-group, inserts them directly, or uses other wrappers.
@@ -740,9 +748,14 @@
 
     baselineSet.clear();
     recordedSet.clear();
-    queue = [];
-    isProcessing = false;
     stopTopbarObserver();
+
+    // Do not clear the queue — messages already detected before stop should still
+    // be processed. Do not reset isProcessing either; if the queue processor is
+    // idle, start it so queued messages drain.
+    if (queue.length > 0 && !isProcessing) {
+      processNext();
+    }
 
     console.log('[TelegramRecorder] stopped recording');
   }
